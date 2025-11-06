@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm init:*)",
+      "Bash(bun:*)",
+      "Bash(export PATH=\"$HOME/.bun/bin:$PATH\")",
+      "Read(//Users/chiragahuja/Library/Application Support/Claude/**)",
+      "WebSearch"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
