@@ -1,4 +1,4 @@
-# DB Explorer 2
+# DB Explorer
 
 A modern database exploration and management platform with comprehensive user authentication, profile management, and chat-based database access. Query your databases using natural language through our AI-powered MCP server.
 
@@ -70,7 +70,7 @@ A modern database exploration and management platform with comprehensive user au
 ## Project Structure
 
 ```
-db-explorer-2/
+db-explorer/
 ├── db-explorer-web/          # Next.js frontend application
 │   ├── src/
 │   │   ├── app/              # Next.js App Router pages
@@ -131,7 +131,7 @@ db-explorer-2/
 ### 1. Clone and Setup
 
 ```bash
-cd db-explorer-2
+cd db-explorer
 ```
 
 ### 2. Backend Setup

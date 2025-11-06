@@ -1,7 +1,7 @@
-# DB Explorer 2 - Clean Project Structure
+# DB Explorer - Project Structure
 
 ## Overview
-DB Explorer 2 is a modern database exploration and management platform with **authentication, user management, and chat-based database access**. Users can query databases using natural language through the MCP (Model Context Protocol) server.
+DB Explorer is a modern database exploration and management platform with **authentication, user management, and chat-based database access**. Users can query databases using natural language through the MCP (Model Context Protocol) server.
 
 ## Core Features
 - User registration and login (email/password)
@@ -408,7 +408,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
     "db-mcp": {
       "command": "/Users/{user}/.bun/bin/bun",
       "args": ["run", "start"],
-      "cwd": "/path/to/db-explorer-2/db-mcp",
+      "cwd": "/path/to/db-explorer/db-mcp",
       "env": {
         "DB_TYPE_1": "mysql",
         "DB_HOST_1": "localhost",

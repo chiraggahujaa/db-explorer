@@ -1,7 +1,7 @@
-# DB Explorer 2 - Project Instructions
+# DB Explorer - Project Instructions
 
 ## Project Overview
-DB Explorer 2 is a modern database exploration and management platform with user authentication, management features, and chat-based database access through an MCP (Model Context Protocol) server.
+DB Explorer is a modern database exploration and management platform with user authentication, management features, and chat-based database access through an MCP (Model Context Protocol) server.
 
 For web application setup and development, see: [db-explorer-web/CLAUDE.md](./db-explorer-web/CLAUDE.md)
 For API server setup and development, see: [db-explorer-api/CLAUDE.md](./db-explorer-api/CLAUDE.md)
