@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   DropdownMenu,
@@ -26,6 +27,11 @@ export function ConnectionCard({
   onInvite,
 }: ConnectionCardProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const router = useRouter();
+
+  const handleCardClick = () => {
+    router.push(`/dashboard/connections/${connection.id}`);
+  };
 
   const getDbTypeLabel = (type: string) => {
     const labels: Record<string, string> = {
@@ -49,7 +55,10 @@ export function ConnectionCard({
   };
 
   return (
-    <Card className="hover:shadow-md transition-shadow cursor-pointer group">
+    <Card 
+      className="hover:shadow-md transition-shadow cursor-pointer group"
+      onClick={handleCardClick}
+    >
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between">
           <div className="flex items-start gap-3 flex-1">

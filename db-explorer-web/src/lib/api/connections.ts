@@ -81,6 +81,17 @@ export const connectionsAPI = {
     const res = await api.get(`/api/connections/${connectionId}/invitations`);
     return res.data;
   },
+
+  // Send invitation email
+  sendInvitationEmail: async (
+    connectionId: string,
+    invitationId: string
+  ): Promise<ActionResponse> => {
+    const res = await api.post(
+      `/api/connections/${connectionId}/invitations/${invitationId}/send-email`
+    );
+    return res.data;
+  },
 };
 
 export const invitationsAPI = {
@@ -90,9 +101,21 @@ export const invitationsAPI = {
     return res.data;
   },
 
+  // Get invitation by token (public endpoint)
+  getInvitationByToken: async (token: string): Promise<InvitationResponse> => {
+    const res = await api.get(`/api/invitations/by-token/${token}`);
+    return res.data;
+  },
+
   // Accept an invitation
   acceptInvitation: async (id: string): Promise<ActionResponse> => {
     const res = await api.post(`/api/invitations/${id}/accept`);
+    return res.data;
+  },
+
+  // Accept an invitation by token
+  acceptInvitationByToken: async (token: string): Promise<ActionResponse> => {
+    const res = await api.post('/api/invitations/accept-by-token', { token });
     return res.data;
   },
 
@@ -105,6 +128,44 @@ export const invitationsAPI = {
   // Cancel an invitation
   cancelInvitation: async (id: string): Promise<ActionResponse> => {
     const res = await api.delete(`/api/invitations/${id}`);
+    return res.data;
+  },
+};
+
+export interface Schema {
+  name: string;
+  tables?: string[];
+}
+
+export interface Table {
+  name: string;
+  schema?: string;
+}
+
+export interface SchemasResponse {
+  success: boolean;
+  data: Schema[];
+  error?: string;
+}
+
+export interface TablesResponse {
+  success: boolean;
+  data: Table[];
+  error?: string;
+}
+
+export const databaseExplorerAPI = {
+  // Get all schemas/databases for a connection
+  getSchemas: async (connectionId: string): Promise<SchemasResponse> => {
+    const res = await api.get(`/api/connections/${connectionId}/schemas`);
+    return res.data;
+  },
+
+  // Get all tables for a schema/database
+  getTables: async (connectionId: string, schemaName?: string): Promise<TablesResponse> => {
+    const res = await api.get(`/api/connections/${connectionId}/tables`, {
+      params: schemaName ? { schema: schemaName } : {},
+    });
     return res.data;
   },
 };
