@@ -76,6 +76,7 @@ export interface ConnectionInvitation {
   invited_by: string;
   role: ConnectionRole;
   status: InvitationStatus;
+  token: string;
   expires_at: string;
   created_at: string;
   updated_at: string;

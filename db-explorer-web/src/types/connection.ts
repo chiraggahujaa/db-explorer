@@ -94,6 +94,7 @@ export interface ConnectionInvitation {
   invitedBy: string;
   role: ConnectionRole;
   status: InvitationStatus;
+  token: string;
   expiresAt: string;
   createdAt: string;
   updatedAt: string;
@@ -144,6 +145,7 @@ export interface ConnectionsResponse {
     owned: ConnectionWithRole[];
     shared: ConnectionWithRole[];
   };
+  error?: string;
 }
 
 export interface ConnectionResponse {
@@ -166,6 +168,7 @@ export interface InvitationResponse {
   success: boolean;
   data: ConnectionInvitation;
   message?: string;
+  error?: string;
 }
 
 export interface ActionResponse {

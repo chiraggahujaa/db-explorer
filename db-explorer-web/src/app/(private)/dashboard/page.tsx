@@ -3,10 +3,12 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Plus, Database, Loader2 } from "lucide-react";
+import { Plus, Database, Loader2, UserPlus } from "lucide-react";
 import { ConnectionCard } from "@/components/connections/ConnectionCard";
 import { ConnectionModal } from "@/components/connections/ConnectionModal";
 import { DeleteConnectionModal } from "@/components/connections/DeleteConnectionModal";
+import { InviteMemberModal } from "@/components/connections/InviteMemberModal";
+import { AcceptInvitationModal } from "@/components/connections/AcceptInvitationModal";
 import { connectionsAPI } from "@/lib/api/connections";
 import { toast } from "sonner";
 import type { ConnectionWithRole } from "@/types/connection";
@@ -15,6 +17,8 @@ export default function DashboardPage() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+  const [isAcceptModalOpen, setIsAcceptModalOpen] = useState(false);
   const [selectedConnection, setSelectedConnection] =
     useState<ConnectionWithRole | null>(null);
   const queryClient = useQueryClient();
@@ -46,8 +50,8 @@ export default function DashboardPage() {
   };
 
   const handleInvite = (connection: ConnectionWithRole) => {
-    // TODO: Implement invite functionality
-    toast.info("Invite functionality coming soon!");
+    setSelectedConnection(connection);
+    setIsInviteModalOpen(true);
   };
 
   const handleSuccess = () => {
@@ -88,10 +92,20 @@ export default function DashboardPage() {
               Manage your database connections
             </p>
           </div>
-          <Button onClick={handleAddClick} size="lg">
-            <Plus className="mr-2 h-4 w-4" />
-            Add Connection
-          </Button>
+          <div className="flex gap-3">
+            <Button
+              variant="outline"
+              onClick={() => setIsAcceptModalOpen(true)}
+              size="lg"
+            >
+              <UserPlus className="mr-2 h-4 w-4" />
+              Accept Invitation
+            </Button>
+            <Button onClick={handleAddClick} size="lg">
+              <Plus className="mr-2 h-4 w-4" />
+              Add Connection
+            </Button>
+          </div>
         </div>
 
         {ownedConnections.length === 0 ? (
@@ -163,6 +177,19 @@ export default function DashboardPage() {
         open={isDeleteModalOpen}
         onOpenChange={setIsDeleteModalOpen}
         connection={selectedConnection}
+        onSuccess={handleSuccess}
+      />
+
+      <InviteMemberModal
+        open={isInviteModalOpen}
+        onOpenChange={setIsInviteModalOpen}
+        connection={selectedConnection}
+        onSuccess={handleSuccess}
+      />
+
+      <AcceptInvitationModal
+        open={isAcceptModalOpen}
+        onOpenChange={setIsAcceptModalOpen}
         onSuccess={handleSuccess}
       />
     </div>
