@@ -50,8 +50,19 @@ export function SignUpForm() {
   };
 
   const { googleAuth, githubAuth, isGitHubAuthenticating } = useAuth();
+  const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+  
   const handleGoogleCredential = (credential: string) => {
     googleAuth({ accessToken: '', idToken: credential });
+  };
+
+  const handleGoogleError = () => {
+    // Suppress console error in development if client ID is not configured
+    if (!googleClientId) {
+      console.warn('Google OAuth is not configured. Please set NEXT_PUBLIC_GOOGLE_CLIENT_ID in your .env.local file.');
+      return;
+    }
+    toast.error('Google sign-up failed. Please check your Google OAuth configuration.');
   };
 
   return (
@@ -185,11 +196,17 @@ export function SignUpForm() {
           </div>
 
           <div className="flex flex-col gap-3 items-center">
-            <GoogleLogin
-              onSuccess={(cred) => cred.credential && handleGoogleCredential(cred.credential)}
-              onError={() => toast.error('Google sign-up failed')}
-              useOneTap
-            />
+            {googleClientId ? (
+              <GoogleLogin
+                onSuccess={(cred) => cred.credential && handleGoogleCredential(cred.credential)}
+                onError={handleGoogleError}
+                useOneTap
+              />
+            ) : (
+              <div className="text-sm text-muted-foreground p-2">
+                Google Sign-In is not configured
+              </div>
+            )}
             <Button
               type="button"
               variant="outline"
