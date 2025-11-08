@@ -28,10 +28,11 @@ export const generalRateLimit = createRateLimit(
   'Too many requests from this IP, please try again later'
 );
 
-// Strict rate limit for auth endpoints - 10 requests per 15 minutes
+// Strict rate limit for auth endpoints - 5 requests per 15 minutes
+// This prevents brute force attacks on login/password reset endpoints
 export const authRateLimit = createRateLimit(
   15 * 60 * 1000, // 15 minutes
-  1000,
+  5,
   'Too many authentication attempts, please try again later'
 );
 

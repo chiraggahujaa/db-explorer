@@ -27,10 +27,12 @@ export const authenticateToken = async (req: Request, res: Response, next: NextF
 
     if (error) {
       console.error('Token verification error:', error);
+      // Don't expose error details to prevent information leakage
+      const isDevelopment = process.env.NODE_ENV === 'development';
       return res.status(403).json({
         success: false,
         error: 'Invalid or expired token',
-        details: error.message,
+        ...(isDevelopment && { details: error.message }),
       });
     }
 

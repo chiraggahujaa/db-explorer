@@ -285,3 +285,44 @@ export const MapperUtils = {
    */
   isPlainObject,
 };
+
+/**
+ * Sanitize connection config by removing sensitive fields (passwords, keys, tokens)
+ * This prevents sensitive credentials from being exposed in API responses
+ */
+export function sanitizeConnectionConfig(config: any): any {
+  if (!config || typeof config !== 'object') {
+    return config;
+  }
+
+  const sanitized = { ...config };
+
+  // Remove password fields (various naming conventions)
+  const sensitiveFields = [
+    'password',
+    'passwd',
+    'pwd',
+    'service_role_key',
+    'serviceRoleKey',
+    'anon_key',
+    'anonKey',
+    'api_key',
+    'apiKey',
+    'access_token',
+    'accessToken',
+    'secret',
+    'secret_key',
+    'secretKey',
+    'token',
+    'auth_token',
+    'authToken',
+  ];
+
+  sensitiveFields.forEach((field) => {
+    if (field in sanitized) {
+      delete sanitized[field];
+    }
+  });
+
+  return sanitized;
+}

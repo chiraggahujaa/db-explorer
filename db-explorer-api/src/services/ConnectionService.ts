@@ -3,7 +3,7 @@
 import { BaseService } from './BaseService.js';
 import { supabaseAdmin } from '../utils/database.js';
 import { ApiResponse } from '../types/common.js';
-import { DataMapper } from '../utils/mappers.js';
+import { DataMapper, sanitizeConnectionConfig } from '../utils/mappers.js';
 import type {
   DatabaseConnection,
   ConnectionWithRole,
@@ -57,10 +57,17 @@ export class ConnectionService extends BaseService {
         throw new Error(`Database error: ${memberError.message}`);
       }
 
-      const connectionsWithRole: ConnectionWithRole[] = (memberData || []).map((member: any) => ({
-        ...DataMapper.toCamelCase(member.database_connections),
-        userRole: member.role,
-      }));
+      const connectionsWithRole: ConnectionWithRole[] = (memberData || []).map((member: any) => {
+        const connection = DataMapper.toCamelCase(member.database_connections);
+        // Sanitize config to remove sensitive credentials
+        if (connection?.config) {
+          connection.config = sanitizeConnectionConfig(connection.config);
+        }
+        return {
+          ...connection,
+          userRole: member.role,
+        };
+      });
 
       // Separate owned and shared connections
       const owned = connectionsWithRole.filter((conn) => conn.userRole === 'owner');
@@ -79,7 +86,7 @@ export class ConnectionService extends BaseService {
   }
 
   /**
-   * Get a single connection by ID with user role
+   * Get a single connection by ID with user role (sanitized for API responses)
    */
   async getConnectionById(
     connectionId: string,
@@ -112,15 +119,72 @@ export class ConnectionService extends BaseService {
         throw new Error(`Database error: ${error.message}`);
       }
 
+      const connection = DataMapper.toCamelCase(data);
+      // Sanitize config to remove sensitive credentials
+      if (connection?.config) {
+        connection.config = sanitizeConnectionConfig(connection.config);
+      }
+
       return {
         success: true,
         data: {
-          ...DataMapper.toCamelCase(data),
+          ...connection,
           userRole: memberData.role,
         },
       };
     } catch (error) {
       console.error('Error in getConnectionById:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get a single connection by ID with unsanitized config (for internal use only)
+   * This method should NOT be exposed via API endpoints
+   */
+  async getConnectionByIdInternal(
+    connectionId: string,
+    userId: string
+  ): Promise<ApiResponse<ConnectionWithRole>> {
+    try {
+      // Check if user has access to this connection
+      const { data: memberData, error: memberError } = await supabaseAdmin
+        .from('connection_members')
+        .select('role')
+        .eq('connection_id', connectionId)
+        .eq('user_id', userId)
+        .single();
+
+      if (memberError) {
+        return {
+          success: false,
+          error: 'Connection not found or access denied',
+        };
+      }
+
+      // Get connection details
+      const { data, error } = await supabaseAdmin
+        .from('database_connections')
+        .select('*')
+        .eq('id', connectionId)
+        .single();
+
+      if (error) {
+        throw new Error(`Database error: ${error.message}`);
+      }
+
+      // Return unsanitized config for internal use (e.g., database connections)
+      const connection = DataMapper.toCamelCase(data);
+
+      return {
+        success: true,
+        data: {
+          ...connection,
+          userRole: memberData.role,
+        },
+      };
+    } catch (error) {
+      console.error('Error in getConnectionByIdInternal:', error);
       throw error;
     }
   }
@@ -133,25 +197,31 @@ export class ConnectionService extends BaseService {
     connectionData: CreateConnectionRequest
   ): Promise<ApiResponse<DatabaseConnection>> {
     try {
-      const { data, error } = await supabaseAdmin
-        .from('database_connections')
-        .insert({
-          name: connectionData.name,
-          description: connectionData.description,
-          db_type: connectionData.db_type,
-          config: connectionData.config,
-          created_by: userId,
-        })
-        .select()
-        .single();
+      // Use PostgreSQL function to bypass RLS policies
+      const { data, error } = await supabaseAdmin.rpc('create_database_connection', {
+        p_name: connectionData.name,
+        p_description: connectionData.description || null,
+        p_db_type: connectionData.db_type,
+        p_config: connectionData.config,
+        p_created_by: userId,
+      });
 
       if (error) {
         throw new Error(`Database error: ${error.message}`);
       }
 
+      // The function returns an array, get the first result
+      const connectionData_result = Array.isArray(data) && data.length > 0 ? data[0] : data;
+      const connection = DataMapper.toCamelCase(connectionData_result);
+      
+      // Sanitize config to remove sensitive credentials before returning
+      if (connection?.config) {
+        connection.config = sanitizeConnectionConfig(connection.config);
+      }
+
       return {
         success: true,
-        data: DataMapper.toCamelCase(data),
+        data: connection,
         message: 'Connection created successfully',
       };
     } catch (error) {
@@ -189,9 +259,15 @@ export class ConnectionService extends BaseService {
         throw new Error(`Database error: ${error.message}`);
       }
 
+      const connection = DataMapper.toCamelCase(data);
+      // Sanitize config to remove sensitive credentials before returning
+      if (connection?.config) {
+        connection.config = sanitizeConnectionConfig(connection.config);
+      }
+
       return {
         success: true,
-        data: DataMapper.toCamelCase(data),
+        data: connection,
         message: 'Connection updated successfully',
       };
     } catch (error) {
