@@ -63,10 +63,10 @@ export function ProfilePage() {
     .toUpperCase() || 'U';
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-7xl">
+    <div className="container mx-auto px-4 pt-2 pb-8 max-w-7xl">
       {/* Profile Header */}
-      <Card className="mb-6">
-        <CardContent className="pt-6">
+      <Card className="mb-6 py-0">
+        <CardContent className="p-6">
           <div className="flex items-center gap-6">
             <Avatar className="h-24 w-24">
               <AvatarImage src={profile.avatarUrl || undefined} alt={profile.fullName || 'User'} />
