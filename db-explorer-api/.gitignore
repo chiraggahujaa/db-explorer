@@ -8,6 +8,11 @@ pnpm-debug.log*
 # Environment variables
 .env*
 !.env.example
+.env.development
+.env.staging
+.env.production
+.env.local
+.env.*.local
 
 # Build outputs
 dist/
