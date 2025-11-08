@@ -13,7 +13,6 @@
     "lint": "echo 'No linter configured - skipping'",
     "typecheck": "tsc --noEmit",
     "postinstall": "test -d .git && lefthook install || echo 'Skipping lefthook install - not a git repository'",
-
     "supabase:start": "supabase start",
     "supabase:stop": "supabase stop",
     "supabase:status": "supabase status",
@@ -27,10 +26,8 @@
     "db:push": "npm run supabase:push",
     "db:reset": "npm run supabase:reset",
     "db:migrate": "npm run supabase:push",
-    
     "test": "cypress run",
     "test:open": "cypress open",
-    
     "test:auth": "cypress run --spec 'cypress/e2e/api/auth/**/*.cy.ts'",
     "test:users": "cypress run --spec 'cypress/e2e/api/users/**/*.cy.ts'",
     "test:items": "cypress run --spec 'cypress/e2e/api/items/**/*.cy.ts'",
@@ -38,36 +35,27 @@
     "test:categories": "cypress run --spec 'cypress/e2e/api/categories/**/*.cy.ts'",
     "test:addresses": "cypress run --spec 'cypress/e2e/api/addresses/**/*.cy.ts'",
     "test:files": "cypress run --spec 'cypress/e2e/api/files/**/*.cy.ts'",
-    
     "test:integration": "cypress run --spec 'cypress/e2e/integration/**/*.cy.ts'",
     "test:smoke": "cypress run --spec 'cypress/e2e/smoke/**/*.cy.ts'",
     "test:regression": "cypress run --spec 'cypress/e2e/regression/**/*.cy.ts'",
-    
     "test:performance": "cross-env PERFORMANCE_TESTING=true cypress run --spec 'cypress/e2e/api/**/*.cy.ts'",
     "test:load": "cross-env LOAD_TESTING=true cypress run --spec 'cypress/e2e/api/**/*.cy.ts'",
-    
     "test:dev": "cross-env NODE_ENV=development cypress run",
     "test:staging": "cross-env NODE_ENV=staging cypress run",
     "test:prod": "cross-env NODE_ENV=production cypress run --spec 'cypress/e2e/smoke/**/*.cy.ts'",
-    
     "test:headless": "cypress run --headless",
     "test:chrome": "cypress run --browser chrome",
     "test:firefox": "cypress run --browser firefox",
     "test:edge": "cypress run --browser edge",
-    
     "test:parallel": "cross-env PARALLEL=true cypress run --parallel --record --key=$CYPRESS_RECORD_KEY",
     "test:record": "cypress run --record --key=$CYPRESS_RECORD_KEY",
-    
     "test:ci": "cross-env NODE_ENV=test cypress run --headless --browser chrome --config video=false,screenshotOnRunFailure=true",
     "test:ci:parallel": "cross-env NODE_ENV=test PARALLEL=true cypress run --parallel --record --key=$CYPRESS_RECORD_KEY --headless --browser chrome",
     "test:ci:smoke": "cross-env NODE_ENV=test cypress run --spec 'cypress/e2e/smoke/**/*.cy.ts' --headless --browser chrome --config video=false",
-    
     "test:tags": "cypress run --env TEST_TAGS=$TEST_TAGS",
     "test:fast": "cross-env FAIL_FAST=true cypress run",
-    
     "test:seed": "echo 'Seeding test database...' && cypress run --spec 'cypress/support/commands/database-commands.ts'",
     "test:clean": "echo 'Cleaning test database...' && cypress run --spec 'cypress/support/commands/database-commands.ts'",
-    
     "pretest": "echo 'Starting comprehensive API tests...'",
     "posttest": "echo 'API tests completed'"
   },
@@ -76,8 +64,11 @@
   "license": "ISC",
   "dependencies": {
     "@supabase/supabase-js": "^2.56.1",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/multer": "^2.0.0",
+    "@types/pg": "^8.15.6",
     "@types/uuid": "^10.0.0",
+    "better-sqlite3": "^12.4.1",
     "compression": "^1.8.1",
     "cors": "^2.8.5",
     "date-fns": "^4.1.0",
@@ -88,7 +79,10 @@
     "joi": "^18.0.1",
     "morgan": "^1.10.1",
     "multer": "^2.0.2",
+    "mysql2": "^3.15.3",
     "node-cron": "^4.2.1",
+    "pg": "^8.16.3",
+    "resend": "^6.4.2",
     "uuid": "^11.1.0",
     "zod": "^4.1.5"
   },

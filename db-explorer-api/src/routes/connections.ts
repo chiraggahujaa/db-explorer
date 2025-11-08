@@ -34,5 +34,13 @@ router.get(
   '/:id/invitations',
   connectionController.getConnectionInvitations.bind(connectionController)
 );
+router.post(
+  '/:id/invitations/:invitationId/send-email',
+  connectionController.sendInvitationEmail.bind(connectionController)
+);
+
+// Database explorer routes
+router.get('/:id/schemas', connectionController.getSchemas.bind(connectionController));
+router.get('/:id/tables', connectionController.getTables.bind(connectionController));
 
 export default router;

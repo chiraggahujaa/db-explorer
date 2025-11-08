@@ -3,6 +3,8 @@
 import { Request, Response } from 'express';
 import { ConnectionService } from '../services/ConnectionService.js';
 import { InvitationService } from '../services/InvitationService.js';
+import { EmailService } from '../services/EmailService.js';
+import { DatabaseExplorerService } from '../services/DatabaseExplorerService.js';
 import {
   createConnectionSchema,
   updateConnectionSchema,
@@ -14,10 +16,12 @@ import {
 export class ConnectionController {
   private connectionService: ConnectionService;
   private invitationService: InvitationService;
+  private databaseExplorerService: DatabaseExplorerService;
 
   constructor() {
     this.connectionService = new ConnectionService();
     this.invitationService = new InvitationService();
+    this.databaseExplorerService = new DatabaseExplorerService();
   }
 
   /**
@@ -565,6 +569,222 @@ export class ConnectionController {
         return res.status(400).json({
           success: false,
           error: 'Invalid invitation ID',
+          details: error.issues,
+        });
+      }
+
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error',
+      });
+    }
+  }
+
+  /**
+   * Send invitation email
+   * POST /api/connections/:id/invitations/:invitationId/send-email
+   */
+  async sendInvitationEmail(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          error: 'User not authenticated',
+        });
+      }
+
+      const { id, invitationId } = req.params;
+      uuidSchema.parse(id);
+      uuidSchema.parse(invitationId);
+
+      // Verify user has permission (owner or admin)
+      const invitationsResult = await this.invitationService.getConnectionInvitations(id, userId);
+      if (!invitationsResult.success) {
+        return res.status(403).json(invitationsResult);
+      }
+
+      // Find the specific invitation
+      const invitation = invitationsResult.data?.find((inv) => inv.id === invitationId);
+      if (!invitation) {
+        return res.status(404).json({
+          success: false,
+          error: 'Invitation not found',
+        });
+      }
+
+      // Send email
+      const emailResult = await EmailService.sendInvitationEmail(invitation);
+      if (!emailResult.success) {
+        return res.status(500).json({
+          success: false,
+          error: emailResult.error || 'Failed to send email',
+        });
+      }
+
+      res.status(200).json({
+        success: true,
+        message: 'Invitation email sent successfully',
+      });
+    } catch (error: any) {
+      console.error('Send invitation email error:', error);
+
+      if (error.name === 'ZodError') {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid parameters',
+          details: error.issues,
+        });
+      }
+
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error',
+      });
+    }
+  }
+
+  /**
+   * Get invitation by token (public endpoint for email links)
+   * GET /api/invitations/by-token/:token
+   */
+  async getInvitationByToken(req: Request, res: Response) {
+    try {
+      const { token } = req.params;
+      if (!token || token.length < 10) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid token',
+        });
+      }
+
+      const result = await this.invitationService.getInvitationByToken(token);
+      if (!result.success) {
+        return res.status(404).json(result);
+      }
+
+      res.status(200).json(result);
+    } catch (error: any) {
+      console.error('Get invitation by token error:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error',
+      });
+    }
+  }
+
+  /**
+   * Accept invitation by token
+   * POST /api/invitations/accept-by-token
+   */
+  async acceptInvitationByToken(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          error: 'User not authenticated',
+        });
+      }
+
+      const { token } = req.body;
+      if (!token || typeof token !== 'string') {
+        return res.status(400).json({
+          success: false,
+          error: 'Token is required',
+        });
+      }
+
+      const result = await this.invitationService.acceptInvitationByToken(token, userId);
+      if (!result.success) {
+        return res.status(400).json(result);
+      }
+
+      res.status(200).json(result);
+    } catch (error: any) {
+      console.error('Accept invitation by token error:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error',
+      });
+    }
+  }
+
+  /**
+   * Get all schemas/databases for a connection
+   * GET /api/connections/:id/schemas
+   */
+  async getSchemas(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          error: 'User not authenticated',
+        });
+      }
+
+      const { id } = req.params;
+      uuidSchema.parse(id);
+
+      const result = await this.databaseExplorerService.getSchemas(id, userId as string);
+
+      if (!result.success) {
+        return res.status(404).json(result);
+      }
+
+      res.status(200).json(result);
+    } catch (error: any) {
+      console.error('Get schemas error:', error);
+
+      if (error.name === 'ZodError') {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid connection ID',
+          details: error.issues,
+        });
+      }
+
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error',
+      });
+    }
+  }
+
+  /**
+   * Get all tables for a schema/database
+   * GET /api/connections/:id/tables?schema=public
+   */
+  async getTables(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          error: 'User not authenticated',
+        });
+      }
+
+      const { id } = req.params;
+      uuidSchema.parse(id);
+
+      const schemaName = req.query.schema as string | undefined;
+
+      const result = await this.databaseExplorerService.getTables(id, userId as string, schemaName);
+
+      if (!result.success) {
+        return res.status(404).json(result);
+      }
+
+      res.status(200).json(result);
+    } catch (error: any) {
+      console.error('Get tables error:', error);
+
+      if (error.name === 'ZodError') {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid connection ID',
           details: error.issues,
         });
       }
