@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { emailSchema, phoneSchema, urlSchema, userGenderSchema, userDobVisibilitySchema, createLocationSchema } from './common.js';
+import { emailSchema, phoneSchema, urlSchema, userGenderSchema, createLocationSchema } from './common.js';
 
 // User creation validation
 export const createUserSchema = z.object({
@@ -8,7 +8,6 @@ export const createUserSchema = z.object({
   phoneNumber: phoneSchema,
   gender: userGenderSchema.optional(),
   dob: z.string().date('Invalid date format (YYYY-MM-DD)').optional(),
-  dobVisibility: userDobVisibilitySchema.default('private'),
   bio: z.string().max(500, 'Bio must be less than 500 characters').optional(),
   location: createLocationSchema.optional(),
 }).refine(data => {
@@ -30,7 +29,6 @@ export const updateUserSchema = z.object({
   phoneNumber: phoneSchema,
   gender: userGenderSchema.optional(),
   dob: z.string().date('Invalid date format (YYYY-MM-DD)').optional(),
-  dobVisibility: userDobVisibilitySchema.optional(),
   bio: z.string().max(500, 'Bio must be less than 500 characters').optional(),
   avatarUrl: urlSchema.optional(),
 }).refine(data => {

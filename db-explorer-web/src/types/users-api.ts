@@ -13,12 +13,13 @@ export interface MeProfile {
   id: string;
   fullName?: string | null;
   email?: string | null;
-  phoneNumber?: string | null;
+  phone?: string | null;
   gender?: string | null;
   dob?: string | null;
-  dobVisibility?: 'private' | 'friends' | 'public' | null;
   trustScore?: number | null;
   isVerified?: boolean | null;
+  emailVerified?: boolean | null;
+  phoneVerified?: boolean | null;
   avatarUrl?: string | null;
   bio?: string | null;
   isActive?: boolean | null;
@@ -32,9 +33,7 @@ export interface UpdateMeProfilePayload {
   phoneNumber?: string;
   gender?: string;
   dob?: string;
-  dobVisibility?: 'private' | 'friends' | 'public';
   bio?: string;
-  avatarUrl?: string;
 }
 
 

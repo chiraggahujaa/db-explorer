@@ -87,7 +87,7 @@ export default function VerifyEmailContent() {
                 const userProfile = profile.data.profile;
                 const needsOnboarding = !userProfile ||
                   !userProfile.fullName ||
-                  !userProfile.phoneNumber ||
+                  !userProfile.phone ||
                   !userProfile.gender ||
                   !userProfile.dob;
 

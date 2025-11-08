@@ -192,7 +192,7 @@ export function UserDetailsTab({ onComplete }: UserDetailsTabProps) {
                   Saving Profile...
                 </>
               ) : (
-                'Continue to KYC'
+                'Complete Profile'
               )}
             </Button>
             </form>

@@ -20,9 +20,9 @@ const needsOnboarding = async (): Promise<boolean> => {
   try {
     const profile = await usersAPI.getMeProfile();
     if (profile.success && profile.data) {
-      const { fullName, phoneNumber, gender, dob } = profile.data;
+      const { fullName, phone, gender, dob } = profile.data;
       // User needs onboarding if they're missing essential profile information
-      return !fullName || !phoneNumber || !gender || !dob;
+      return !fullName || !phone || !gender || !dob;
     }
     return true; // Default to needing onboarding if we can't get profile
   } catch {

@@ -3,19 +3,11 @@ import { z } from "zod";
 // Common validation patterns
 const phoneSchema = z
   .string()
-  .regex(/^[+]?[\d\s\-\(\)]{10,15}$/, "Invalid phone number format")
-  .optional()
-  .or(z.literal(""));
-
-const urlSchema = z
-  .string()
-  .url("Invalid URL format")
-  .optional()
-  .or(z.literal(""));
+  .min(1, "Phone number is required")
+  .regex(/^[+]?[\d\s\-\(\)]{10,15}$/, "Invalid phone number format");
 
 // Enum validations matching backend database
 const userGenderSchema = z.enum(["male", "female", "other", "prefer_not_to_say"] as const);
-const userDobVisibilitySchema = z.enum(["public", "friends", "private"] as const);
 
 // Profile edit validation schema
 export const profileEditSchema = z
@@ -28,13 +20,12 @@ export const profileEditSchema = z
         message: "Full name must contain at least 2 non-whitespace characters",
       }),
     phoneNumber: phoneSchema,
-    gender: userGenderSchema.optional(),
+    gender: userGenderSchema,
     dob: z
       .string()
-      .optional()
+      .min(1, "Date of birth is required")
       .refine(
         (val) => {
-          if (!val || val === "") return true;
           // Check if it's a valid date format (YYYY-MM-DD)
           const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
           if (!dateRegex.test(val)) return false;
@@ -49,8 +40,6 @@ export const profileEditSchema = z
       )
       .refine(
         (val) => {
-          if (!val || val === "") return true;
-          
           const dobDate = new Date(val);
           const today = new Date();
           const age = today.getFullYear() - dobDate.getFullYear();
@@ -67,27 +56,12 @@ export const profileEditSchema = z
           message: "User must be between 18 and 100 years old",
         }
       ),
-    dobVisibility: userDobVisibilitySchema.optional(),
     bio: z
       .string()
       .max(500, "Bio must be less than 500 characters")
       .optional()
       .or(z.literal("")),
-    avatarUrl: urlSchema,
-  })
-  .refine(
-    (data) => {
-      // If dob is provided, dobVisibility should be meaningful
-      if (data.dob && data.dob !== "") {
-        return data.dobVisibility !== undefined;
-      }
-      return true;
-    },
-    {
-      message: "Date of birth visibility is required when date of birth is provided",
-      path: ["dobVisibility"],
-    }
-  );
+  });
 
 // Export the type for use in components
 export type ProfileEditFormData = z.infer<typeof profileEditSchema>;

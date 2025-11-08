@@ -1,4 +1,4 @@
-import { BaseEntity, UserGender, UserDobVisibility } from './common.js';
+import { BaseEntity, UserGender } from './common.js';
 
 export interface User extends BaseEntity {
   id: string;
@@ -7,9 +7,10 @@ export interface User extends BaseEntity {
   phoneNumber?: string;
   gender?: UserGender;
   dob?: string;
-  dobVisibility: UserDobVisibility;
   trustScore: number;
   isVerified: boolean;
+  emailVerified?: boolean;
+  phoneVerified?: boolean;
   avatarUrl?: string;
   bio?: string;
   isActive: boolean;
@@ -33,7 +34,6 @@ export interface CreateUserDto {
   phoneNumber?: string;
   gender?: UserGender;
   dob?: string;
-  dobVisibility?: UserDobVisibility;
   bio?: string;
 }
 
@@ -42,7 +42,6 @@ export interface UpdateUserDto {
   phoneNumber?: string;
   gender?: UserGender;
   dob?: string;
-  dobVisibility?: UserDobVisibility;
   bio?: string;
   avatarUrl?: string;
 }

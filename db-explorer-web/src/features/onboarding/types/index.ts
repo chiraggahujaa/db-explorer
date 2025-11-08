@@ -1,4 +1,4 @@
-export type OnboardingStep = 'details' | 'kyc';
+export type OnboardingStep = 'details';
 
 export interface UserDetailsFormData {
   fullName: string;

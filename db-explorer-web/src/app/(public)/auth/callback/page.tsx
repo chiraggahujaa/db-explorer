@@ -36,7 +36,7 @@ export default function AuthCallbackPage() {
         });
         
         // Check if user needs onboarding
-        const needsOnboardingCheck = !userData.name || !profileResponse.data.profile?.phoneNumber;
+        const needsOnboardingCheck = !userData.name || !profileResponse.data.profile?.phone;
         if (needsOnboardingCheck) {
           router.push('/onboarding');
         } else {

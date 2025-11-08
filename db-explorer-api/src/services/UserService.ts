@@ -5,6 +5,7 @@ import { BaseService } from './BaseService.js';
 import { supabaseAdmin } from '../lib/supabase.js';
 import { CreateUserDto, UpdateUserDto, User } from '../types/user.js';
 import { ApiResponse } from '../types/common.js';
+import { DataMapper } from '../utils/mappers.js';
 
 export class UserService extends BaseService {
   constructor() {
@@ -51,6 +52,20 @@ export class UserService extends BaseService {
   }
 
   /**
+   * Transform database user data to API format
+   * Maps snake_case to camelCase and handles special field mappings
+   */
+  private transformUserData(data: any): User {
+    const transformed = DataMapper.toCamelCase(data);
+    // Map dateOfBirth to dob for API consistency
+    if (transformed.dateOfBirth !== undefined) {
+      transformed.dob = transformed.dateOfBirth;
+      delete transformed.dateOfBirth;
+    }
+    return transformed as User;
+  }
+
+  /**
    * Get user by ID
    */
   async getUserById(userId: string): Promise<ApiResponse<User>> {
@@ -65,7 +80,7 @@ export class UserService extends BaseService {
         return this.errorResponse('User not found');
       }
 
-      return this.successResponse(data);
+      return this.successResponse(this.transformUserData(data));
     } catch (error) {
       console.error('Get user error:', error);
       return this.errorResponse('Failed to get user');
@@ -87,7 +102,7 @@ export class UserService extends BaseService {
         return this.errorResponse('User not found');
       }
 
-      return this.successResponse(data);
+      return this.successResponse(this.transformUserData(data));
     } catch (error) {
       console.error('Get user by email error:', error);
       return this.errorResponse('Failed to get user');
@@ -99,9 +114,33 @@ export class UserService extends BaseService {
    */
   async updateUser(userId: string, userData: UpdateUserDto): Promise<ApiResponse<User>> {
     try {
+      // Map camelCase fields to snake_case for database
+      const dbData: Record<string, any> = {
+        updated_at: new Date().toISOString(),
+      };
+
+      if (userData.fullName !== undefined) {
+        dbData.full_name = userData.fullName;
+      }
+      if (userData.phoneNumber !== undefined) {
+        dbData.phone = userData.phoneNumber;
+      }
+      if (userData.gender !== undefined) {
+        dbData.gender = userData.gender;
+      }
+      if (userData.dob !== undefined) {
+        dbData.date_of_birth = userData.dob;
+      }
+      if (userData.bio !== undefined) {
+        dbData.bio = userData.bio;
+      }
+      if (userData.avatarUrl !== undefined) {
+        dbData.avatar_url = userData.avatarUrl;
+      }
+
       const { data, error } = await supabaseAdmin
         .from('users')
-        .update({ ...userData, updated_at: new Date().toISOString() })
+        .update(dbData)
         .eq('id', userId)
         .select()
         .single();
@@ -111,7 +150,7 @@ export class UserService extends BaseService {
         return this.errorResponse('Failed to update user');
       }
 
-      return this.successResponse(data, 'User updated successfully');
+      return this.successResponse(this.transformUserData(data), 'User updated successfully');
     } catch (error) {
       console.error('Update user error:', error);
       return this.errorResponse('Failed to update user');

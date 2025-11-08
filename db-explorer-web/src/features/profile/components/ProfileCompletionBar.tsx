@@ -19,24 +19,18 @@ interface ProfileCompletionBarProps {
 
 export function ProfileCompletionBar({ profile, userId, className, onEditClick }: ProfileCompletionBarProps) {
   const completion = useMemo(() => {
-    const requiredKeys = ['fullName', 'email', 'phoneNumber', 'avatarUrl', 'gender', 'dob', 'bio'] as const;
+    const requiredKeys = ['fullName', 'email', 'phone', 'avatarUrl', 'gender', 'dob', 'bio'] as const;
     const p = profile || {} as MeProfile;
     const present = requiredKeys.filter((key) => !!p[key]);
     
-    // Profile completion is 50% of total
-    const profilePercent = (present.length / requiredKeys.length) * 50;
-    
-    // KYC verification is the other 50%
-    const kycPercent = p.isVerified ? 50 : 0;
-    
-    const totalPercent = Math.round(profilePercent + kycPercent);
+    // Profile completion percentage
+    const profilePercent = Math.round((present.length / requiredKeys.length) * 100);
     
     return {
-      percent: Math.max(0, Math.min(100, totalPercent)),
-      profilePercent: Math.round(profilePercent),
+      percent: Math.max(0, Math.min(100, profilePercent)),
+      profilePercent: profilePercent,
       completedFields: present.length,
       totalFields: requiredKeys.length,
-      isVerified: !!p.isVerified,
     };
   }, [profile]);
 
@@ -74,9 +68,6 @@ export function ProfileCompletionBar({ profile, userId, className, onEditClick }
                   <span className="text-xs text-gray-500">
                     {completion.completedFields}/{completion.totalFields} fields
                   </span>
-                  <div className="text-xs text-gray-500">
-                    {completion.isVerified ? '✓ Verified' : '○ KYC Pending'}
-                  </div>
                 </div>
               </div>
               
@@ -95,13 +86,6 @@ export function ProfileCompletionBar({ profile, userId, className, onEditClick }
             >
               Complete Profile
             </Button>
-            {!completion.isVerified && (
-              <Button size="sm" asChild>
-                <Link href="/kyc">
-                  Verify Identity
-                </Link>
-              </Button>
-            )}
           </div>
         </div>
       </CardContent>

@@ -7,7 +7,7 @@ export type RouteType = 'public' | 'private' | 'auth';
  * Determines the route type based on pathname
  * Uses the existing folder structure patterns:
  * - (auth)/ routes: signin, signup, reset-password, verify-email
- * - (private)/ routes: dashboard, profile, add, kyc, products
+ * - (private)/ routes: dashboard, profile, add, products
  * - (public)/ routes: homepage, email-confirmation, and others
  */
 export function getRouteType(pathname: string): RouteType {
@@ -29,7 +29,6 @@ export function getRouteType(pathname: string): RouteType {
     '/dashboard',
     '/profile',
     '/add',
-    '/kyc',
     '/products'
   ];
   

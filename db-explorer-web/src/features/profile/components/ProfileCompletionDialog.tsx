@@ -14,19 +14,14 @@ export function ProfileCompletionDialog({ profile, userId }: ProfileCompletionDi
   const [open, setOpen] = useState(false);
 
   const completion = useMemo(() => {
-    const requiredKeys = ['fullName', 'email', 'phoneNumber', 'gender', 'dob', 'bio'] as const;
+    const requiredKeys = ['fullName', 'email', 'phone', 'gender', 'dob', 'bio'] as const;
     const p = (profile || {}) as Record<string, unknown>;
     const present = requiredKeys.filter((key) => !!p[key]);
     
-    // Profile completion is 50% of total
-    const profilePercent = (present.length / requiredKeys.length) * 50;
+    // Profile completion percentage
+    const profilePercent = Math.round((present.length / requiredKeys.length) * 100);
     
-    // KYC verification is the other 50%
-    const kycPercent = p.isVerified ? 50 : 0;
-    
-    const totalPercent = Math.round(profilePercent + kycPercent);
-    
-    return Math.max(0, Math.min(100, totalPercent));
+    return Math.max(0, Math.min(100, profilePercent));
   }, [profile]);
 
   useEffect(() => {
@@ -45,9 +40,6 @@ export function ProfileCompletionDialog({ profile, userId }: ProfileCompletionDi
         <DialogFooter className="sm:justify-end">
           <Button variant="secondary" asChild>
             <Link href={`/profile/${userId}/edit`}>Edit Profile</Link>
-          </Button>
-          <Button asChild>
-            <Link href={`/kyc`}>Do KYC</Link>
           </Button>
         </DialogFooter>
       </DialogContent>
