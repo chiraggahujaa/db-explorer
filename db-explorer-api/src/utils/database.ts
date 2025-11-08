@@ -12,6 +12,11 @@ export const createUserProfile = async (userId: string, userData: any) => {
       return { data: existingProfile.data, error: null };
     }
 
+    // Determine email_verified: true if email_confirmed_at exists or explicitly set to true
+    const emailVerified = userData.email_verified !== undefined 
+      ? userData.email_verified 
+      : (userData.email_confirmed_at !== null && userData.email_confirmed_at !== undefined);
+
     const { data, error } = await supabaseAdmin
       .from('users')
       .insert({
@@ -20,6 +25,7 @@ export const createUserProfile = async (userId: string, userData: any) => {
         email: userData.email || null,
         phone_number: userData.phone || null,
         avatar_url: userData.avatar_url || null,
+        email_verified: emailVerified,
         is_verified: false,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),

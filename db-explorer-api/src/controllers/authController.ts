@@ -373,6 +373,9 @@ export class AuthController {
           isNewUser = !emailExists;
         }
 
+        // For OAuth providers, email is automatically verified
+        const emailVerified = true;
+
         // If it's a new user, create profile
         if (isNewUser) {
           try {
@@ -383,6 +386,7 @@ export class AuthController {
               email: data.user.email,
               avatar_url: data.user.user_metadata?.avatar_url || null,
               email_confirmed_at: data.user.email_confirmed_at,
+              email_verified: emailVerified,
             });
 
             if (profileResult.error) {
@@ -401,6 +405,25 @@ export class AuthController {
             }
           } catch (profileError) {
             console.error('Google profile creation exception:', profileError);
+          }
+        } else {
+          // For existing users, update email_verified to true if not already verified
+          try {
+            const { data: userData } = await supabaseAdmin
+              .from('users')
+              .select('email_verified')
+              .eq('id', data.user.id)
+              .single();
+            
+            if (userData && !userData.email_verified) {
+              await supabaseAdmin
+                .from('users')
+                .update({ email_verified: true })
+                .eq('id', data.user.id);
+              console.log('Updated email_verified for existing Google user:', data.user.id);
+            }
+          } catch (updateError) {
+            console.error('Error updating email_verified for existing Google user:', updateError);
           }
         }
       }
@@ -523,6 +546,9 @@ export class AuthController {
           isNewUser = !emailExists;
         }
 
+        // For OAuth providers, email is automatically verified
+        const emailVerified = true;
+
         // If it's a new user, create profile
         if (isNewUser) {
           try {
@@ -536,6 +562,7 @@ export class AuthController {
               email: data.user.email,
               avatar_url: data.user.user_metadata?.avatar_url || null,
               email_confirmed_at: data.user.email_confirmed_at,
+              email_verified: emailVerified,
             });
 
             if (profileResult.error) {
@@ -554,6 +581,25 @@ export class AuthController {
             }
           } catch (profileError) {
             console.error('GitHub profile creation exception:', profileError);
+          }
+        } else {
+          // For existing users, update email_verified to true if not already verified
+          try {
+            const { data: userData } = await supabaseAdmin
+              .from('users')
+              .select('email_verified')
+              .eq('id', data.user.id)
+              .single();
+            
+            if (userData && !userData.email_verified) {
+              await supabaseAdmin
+                .from('users')
+                .update({ email_verified: true })
+                .eq('id', data.user.id);
+              console.log('Updated email_verified for existing GitHub user:', data.user.id);
+            }
+          } catch (updateError) {
+            console.error('Error updating email_verified for existing GitHub user:', updateError);
           }
         }
       }
