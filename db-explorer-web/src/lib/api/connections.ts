@@ -70,8 +70,14 @@ export const connectionsAPI = {
     return res.data;
   },
 
-  // Invite a user to a connection
-  inviteMember: async (connectionId: string, data: InviteMemberRequest): Promise<InvitationResponse> => {
+  // Leave a shared connection (remove current user from connection)
+  leaveSharedConnection: async (connectionId: string): Promise<ActionResponse> => {
+    const res = await api.post(`/api/connections/${connectionId}/leave`);
+    return res.data;
+  },
+
+  // Invite user(s) to a connection (supports single email or multiple emails with same role)
+  inviteMember: async (connectionId: string, data: InviteMemberRequest): Promise<InvitationResponse | { success: boolean; data: { invitations: any[]; errors: Array<{ email: string; error: string }> }; message?: string; error?: string }> => {
     const res = await api.post(`/api/connections/${connectionId}/invite`, data);
     return res.data;
   },

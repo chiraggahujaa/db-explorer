@@ -471,6 +471,59 @@ export class ConnectionService extends BaseService {
   }
 
   /**
+   * Leave a shared connection (remove current user from connection)
+   */
+  async leaveConnection(
+    connectionId: string,
+    userId: string
+  ): Promise<ApiResponse<void>> {
+    try {
+      // Check if user is a member of the connection
+      const { data: memberData, error: memberError } = await supabaseAdmin
+        .from('connection_members')
+        .select('id, role')
+        .eq('connection_id', connectionId)
+        .eq('user_id', userId)
+        .single();
+
+      if (memberError || !memberData) {
+        return {
+          success: false,
+          error: 'You are not a member of this connection',
+        };
+      }
+
+      // Prevent owners from leaving (they should delete the connection instead)
+      if (memberData.role === 'owner') {
+        return {
+          success: false,
+          error: 'Owners cannot leave their own connection. Please delete the connection instead.',
+        };
+      }
+
+      // Remove the user from the connection
+      const { error } = await supabaseAdmin
+        .from('connection_members')
+        .delete()
+        .eq('id', memberData.id)
+        .eq('connection_id', connectionId)
+        .eq('user_id', userId);
+
+      if (error) {
+        throw new Error(`Database error: ${error.message}`);
+      }
+
+      return {
+        success: true,
+        message: 'Successfully left the connection',
+      };
+    } catch (error) {
+      console.error('Error in leaveConnection:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Check if user has permission for a connection
    */
   private async checkPermission(

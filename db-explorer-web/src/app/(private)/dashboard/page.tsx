@@ -54,6 +54,25 @@ export default function DashboardPage() {
     setIsInviteModalOpen(true);
   };
 
+  const handleRemoveShared = async (connection: ConnectionWithRole) => {
+    if (!confirm(`Are you sure you want to remove "${connection.name}" from your shared connections?`)) {
+      return;
+    }
+
+    try {
+      const result = await connectionsAPI.leaveSharedConnection(connection.id);
+      if (result.success) {
+        toast.success("Successfully removed from shared connections");
+        handleSuccess();
+      } else {
+        toast.error(result.error || "Failed to remove shared connection");
+      }
+    } catch (error: any) {
+      console.error("Error removing shared connection:", error);
+      toast.error(error.message || "Failed to remove shared connection");
+    }
+  };
+
   const handleSuccess = () => {
     queryClient.invalidateQueries({ queryKey: ["connections"] });
   };
@@ -152,6 +171,8 @@ export default function DashboardPage() {
                 onEdit={handleEdit}
                 onDelete={handleDelete}
                 onInvite={handleInvite}
+                onRemove={handleRemoveShared}
+                isShared={true}
               />
             ))}
           </div>

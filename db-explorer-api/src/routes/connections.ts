@@ -27,6 +27,7 @@ router.delete(
   '/:id/members/:memberId',
   connectionController.removeMember.bind(connectionController)
 );
+router.post('/:id/leave', connectionController.leaveConnection.bind(connectionController));
 
 // Invitation routes for connections
 router.post('/:id/invite', connectionController.inviteMember.bind(connectionController));

@@ -344,8 +344,52 @@ export class ConnectionController {
   }
 
   /**
-   * Invite a user to a connection
+   * Leave a shared connection (remove current user from connection)
+   * POST /api/connections/:id/leave
+   */
+  async leaveConnection(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          error: 'User not authenticated',
+        });
+      }
+
+      const { id } = req.params;
+      uuidSchema.parse(id);
+
+      const result = await this.connectionService.leaveConnection(id, userId);
+
+      if (!result.success) {
+        return res.status(403).json(result);
+      }
+
+      res.status(200).json(result);
+    } catch (error: any) {
+      console.error('Leave connection error:', error);
+
+      if (error.name === 'ZodError') {
+        return res.status(400).json({
+          success: false,
+          error: 'Validation error',
+          details: error.issues,
+        });
+      }
+
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error',
+      });
+    }
+  }
+
+  /**
+   * Invite user(s) to a connection
    * POST /api/connections/:id/invite
+   * Supports single email: { email, role }
+   * or multiple emails: { emails: [string], role }
    */
   async inviteMember(req: Request, res: Response) {
     try {
@@ -360,8 +404,17 @@ export class ConnectionController {
       const { id } = req.params;
       uuidSchema.parse(id);
 
-      const { email, role } = inviteMemberSchema.parse(req.body);
-      const result = await this.invitationService.createInvitation(id, email, role, userId);
+      const { email, emails, role } = inviteMemberSchema.parse(req.body);
+      
+      // Determine which emails to invite
+      const emailsToInvite = emails || (email ? [email] : []);
+      
+      // Create invitations for all emails with the same role
+      const result = await this.invitationService.createBulkInvitations(
+        id,
+        emailsToInvite.map((email) => ({ email, role })),
+        userId
+      );
 
       if (!result.success) {
         return res.status(400).json(result);

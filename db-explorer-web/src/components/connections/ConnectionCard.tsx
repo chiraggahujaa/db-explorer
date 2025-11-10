@@ -10,7 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { MoreVertical, Edit, Trash2, UserPlus, Database } from "lucide-react";
+import { MoreVertical, Edit, Trash2, UserPlus, Database, X } from "lucide-react";
 import type { ConnectionWithRole } from "@/types/connection";
 
 interface ConnectionCardProps {
@@ -18,6 +18,8 @@ interface ConnectionCardProps {
   onEdit: (connection: ConnectionWithRole) => void;
   onDelete: (connection: ConnectionWithRole) => void;
   onInvite: (connection: ConnectionWithRole) => void;
+  onRemove?: (connection: ConnectionWithRole) => void;
+  isShared?: boolean;
 }
 
 export function ConnectionCard({
@@ -25,6 +27,8 @@ export function ConnectionCard({
   onEdit,
   onDelete,
   onInvite,
+  onRemove,
+  isShared = false,
 }: ConnectionCardProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const router = useRouter();
@@ -109,6 +113,19 @@ export function ConnectionCard({
                 <Edit className="mr-2 h-4 w-4" />
                 Edit
               </DropdownMenuItem>
+              {isShared && onRemove && connection.userRole !== "owner" && (
+                <DropdownMenuItem
+                  variant="destructive"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRemove(connection);
+                    setIsMenuOpen(false);
+                  }}
+                >
+                  <X className="mr-2 h-4 w-4" />
+                  Remove
+                </DropdownMenuItem>
+              )}
               {(connection.userRole === "owner" || connection.userRole === "admin") && (
                 <DropdownMenuItem
                   variant="destructive"
