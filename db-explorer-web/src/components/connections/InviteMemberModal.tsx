@@ -19,10 +19,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { connectionsAPI } from "@/lib/api/connections";
-import { Copy, Mail, Check } from "lucide-react";
+import { Plus, X, Mail, Check, Copy, Loader2, AlertCircle } from "lucide-react";
 import type { ConnectionWithRole, ConnectionRole } from "@/types/connection";
 
 interface InviteMemberModalProps {
@@ -32,9 +31,18 @@ interface InviteMemberModalProps {
   onSuccess: () => void;
 }
 
-interface FormData {
+interface EmailEntry {
+  id: string;
   email: string;
-  role: Exclude<ConnectionRole, "owner">;
+  emailError?: string;
+}
+
+interface InvitationResult {
+  email: string;
+  success: boolean;
+  error?: string;
+  token?: string;
+  id?: string;
 }
 
 export function InviteMemberModal({
@@ -43,41 +51,137 @@ export function InviteMemberModal({
   connection,
   onSuccess,
 }: InviteMemberModalProps) {
+  const [emails, setEmails] = useState<EmailEntry[]>([
+    { id: crypto.randomUUID(), email: "" },
+  ]);
+  const [role, setRole] = useState<Exclude<ConnectionRole, "owner">>("developer");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSendingEmail, setIsSendingEmail] = useState(false);
-  const [invitationToken, setInvitationToken] = useState<string | null>(null);
-  const [invitationId, setInvitationId] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [results, setResults] = useState<InvitationResult[]>([]);
+  const [isSendingEmails, setIsSendingEmails] = useState(false);
+  const [copiedTokenIndex, setCopiedTokenIndex] = useState<number | null>(null);
 
-  const {
-    register,
-    handleSubmit,
-    setValue,
-    reset,
-    formState: { errors },
-  } = useForm<FormData>({
-    defaultValues: {
-      email: "",
-      role: "developer",
-    },
-  });
+  const emailRegex = /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i;
 
-  const onSubmit = async (data: FormData) => {
+  const validateEmail = (email: string): string | undefined => {
+    if (!email.trim()) {
+      return "Email is required";
+    }
+    if (!emailRegex.test(email)) {
+      return "Invalid email address";
+    }
+    return undefined;
+  };
+
+  const addEmail = () => {
+    setEmails([...emails, { id: crypto.randomUUID(), email: "" }]);
+  };
+
+  const removeEmail = (id: string) => {
+    if (emails.length > 1) {
+      setEmails(emails.filter((email) => email.id !== id));
+    }
+  };
+
+  const updateEmail = (id: string, value: string) => {
+    setEmails(
+      emails.map((email) => {
+        if (email.id === id) {
+          const updated = { ...email, email: value };
+          const error = validateEmail(value);
+          return { ...updated, emailError: error };
+        }
+        return email;
+      })
+    );
+  };
+
+  const validateAll = (): boolean => {
+    let isValid = true;
+    const updated = emails.map((email) => {
+      const error = validateEmail(email.email);
+      if (error) {
+        isValid = false;
+      }
+      return { ...email, emailError: error };
+    });
+    setEmails(updated);
+    return isValid;
+  };
+
+  const handleCopyToken = async (token: string, index: number) => {
+    try {
+      await navigator.clipboard.writeText(token);
+      setCopiedTokenIndex(index);
+      toast.success("Token copied to clipboard");
+      setTimeout(() => setCopiedTokenIndex(null), 2000);
+    } catch (error) {
+      toast.error("Failed to copy token");
+    }
+  };
+
+  const onSubmit = async () => {
     if (!connection) return;
 
+    if (!validateAll()) {
+      toast.error("Please fix validation errors before submitting");
+      return;
+    }
+
     setIsSubmitting(true);
+    setResults([]);
+
     try {
+      const emailList = emails.map((e) => e.email.trim()).filter((e) => e);
+
       const result = await connectionsAPI.inviteMember(connection.id, {
-        email: data.email,
-        role: data.role,
+        emails: emailList,
+        role,
       });
 
-      if (result.success && result.data) {
-        setInvitationToken(result.data.token);
-        setInvitationId(result.data.id);
-        toast.success("Invitation created successfully");
+      if (result.success && "data" in result && result.data) {
+        const bulkResult = result.data as {
+          invitations: Array<{ id: string; token: string; invitedEmail: string }>;
+          errors: Array<{ email: string; error: string }>;
+        };
+
+        // Map results
+        const invitationResults: InvitationResult[] = [];
+
+        // Add successful invitations
+        bulkResult.invitations.forEach((inv) => {
+          invitationResults.push({
+            email: inv.invitedEmail,
+            success: true,
+            token: inv.token,
+            id: inv.id,
+          });
+        });
+
+        // Add errors
+        bulkResult.errors.forEach((err) => {
+          invitationResults.push({
+            email: err.email,
+            success: false,
+            error: err.error,
+          });
+        });
+
+        setResults(invitationResults);
+
+        const successCount = bulkResult.invitations.length;
+        const errorCount = bulkResult.errors.length;
+
+        if (successCount > 0) {
+          toast.success(
+            `Successfully created ${successCount} invitation(s)${
+              errorCount > 0 ? `, ${errorCount} failed` : ""
+            }`
+          );
+        } else {
+          toast.error("Failed to create invitations");
+        }
       } else {
-        toast.error(result.error || "Failed to create invitation");
+        toast.error(result.error || "Failed to create invitations");
       }
     } catch (error: any) {
       console.error("Invite member error:", error);
@@ -87,47 +191,63 @@ export function InviteMemberModal({
     }
   };
 
-  const handleSendEmail = async () => {
-    if (!connection || !invitationId) return;
+  const handleSendEmails = async () => {
+    if (!connection) return;
 
-    setIsSendingEmail(true);
+    const successfulInvitations = results.filter((r) => r.success && r.id);
+    if (successfulInvitations.length === 0) {
+      toast.error("No successful invitations to send emails for");
+      return;
+    }
+
+    setIsSendingEmails(true);
+    let successCount = 0;
+    let errorCount = 0;
+
     try {
-      const result = await connectionsAPI.sendInvitationEmail(
-        connection.id,
-        invitationId
+      await Promise.all(
+        successfulInvitations.map(async (result) => {
+          if (!result.id) return;
+          try {
+            const emailResult = await connectionsAPI.sendInvitationEmail(
+              connection.id,
+              result.id
+            );
+            if (emailResult.success) {
+              successCount++;
+            } else {
+              errorCount++;
+            }
+          } catch {
+            errorCount++;
+          }
+        })
       );
 
-      if (result.success) {
-        toast.success("Invitation email sent successfully");
+      if (successCount > 0) {
+        toast.success(
+          `Successfully sent ${successCount} email(s)${
+            errorCount > 0 ? `, ${errorCount} failed` : ""
+          }`
+        );
       } else {
-        toast.error(result.error || "Failed to send email");
+        toast.error("Failed to send emails");
       }
-    } catch (error: any) {
-      console.error("Send email error:", error);
-      toast.error(error?.response?.data?.error || "Failed to send email");
-    } finally {
-      setIsSendingEmail(false);
-    }
-  };
-
-  const handleCopyToken = async () => {
-    if (!invitationToken) return;
-
-    try {
-      await navigator.clipboard.writeText(invitationToken);
-      setCopied(true);
-      toast.success("Token copied to clipboard");
-      setTimeout(() => setCopied(false), 2000);
     } catch (error) {
-      toast.error("Failed to copy token");
+      console.error("Send emails error:", error);
+      toast.error("Failed to send emails");
+    } finally {
+      setIsSendingEmails(false);
     }
   };
 
   const handleClose = () => {
-    reset();
-    setInvitationToken(null);
-    setInvitationId(null);
-    setCopied(false);
+    setEmails([{ id: crypto.randomUUID(), email: "" }]);
+    setRole("developer");
+    setResults([]);
+    setIsSubmitting(false);
+    setIsSendingEmails(false);
+    setCopiedTokenIndex(null);
     onOpenChange(false);
   };
 
@@ -136,67 +256,141 @@ export function InviteMemberModal({
     handleClose();
   };
 
-  // Show success state with token
-  if (invitationToken) {
+  // Show results state with tokens
+  if (results.length > 0) {
+    const successfulInvitations = results.filter((r) => r.success);
+    const failedInvitations = results.filter((r) => !r.success);
+    const hasSuccessful = successfulInvitations.length > 0;
+    const hasFailed = failedInvitations.length > 0;
+
     return (
       <Dialog open={open} onOpenChange={handleClose}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-2xl max-h-[90vh]">
           <DialogHeader>
             <DialogTitle>Invitation Created</DialogTitle>
             <DialogDescription>
-              Share this token with the invited user or send them an email.
+              {hasSuccessful && (
+                <span className="text-green-600 font-medium">
+                  {successfulInvitations.length} invitation(s) created successfully
+                </span>
+              )}
+              {hasFailed && (
+                <span className="text-destructive ml-2">
+                  {failedInvitations.length} invitation(s) could not be created
+                </span>
+              )}
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="token">Invitation Token</Label>
-              <div className="flex gap-2">
-                <Input
-                  id="token"
-                  value={invitationToken}
-                  readOnly
-                  className="font-mono text-sm"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  onClick={handleCopyToken}
-                  className="flex-shrink-0"
-                >
-                  {copied ? (
-                    <Check className="h-4 w-4 text-green-600" />
-                  ) : (
-                    <Copy className="h-4 w-4" />
-                  )}
-                </Button>
+          <div className="space-y-6">
+            {/* Show tokens for successful invitations */}
+            {hasSuccessful && (
+              <div className="space-y-4">
+                <Label className="text-base font-semibold">
+                  Invitation Token{successfulInvitations.length > 1 ? "s" : ""}
+                </Label>
+                <p className="text-sm text-muted-foreground">
+                  Share {successfulInvitations.length > 1 ? "these tokens" : "this token"} with the invited user{successfulInvitations.length > 1 ? "s" : ""} or send them an email.
+                </p>
+                
+                <div className="space-y-3">
+                  {successfulInvitations.map((invitation, index) => (
+                    <div key={index} className="space-y-2">
+                      {successfulInvitations.length > 1 && (
+                        <Label className="text-sm font-medium text-muted-foreground">
+                          {invitation.email}
+                        </Label>
+                      )}
+                      <div className="flex gap-2">
+                        <Input
+                          value={invitation.token || ""}
+                          readOnly
+                          className="font-mono text-sm"
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          onClick={() => handleCopyToken(invitation.token!, index)}
+                          className="flex-shrink-0"
+                        >
+                          {copiedTokenIndex === index ? (
+                            <Check className="h-4 w-4 text-green-600" />
+                          ) : (
+                            <Copy className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <p className="text-xs text-muted-foreground">
-                The user can enter this token in the "Accept Invitation" modal
-                or click the link in the email.
-              </p>
-            </div>
+            )}
 
-            <div className="flex gap-2">
+            {/* Show failed invitations */}
+            {hasFailed && (
+              <div className="space-y-3 border-t pt-4">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <Label className="text-base font-semibold text-amber-900">
+                      Could not create invitations for the following email(s):
+                    </Label>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      These users are already members of this connection or there was an error.
+                    </p>
+                  </div>
+                </div>
+                
+                <div className="space-y-2 pl-7">
+                  {failedInvitations.map((failed, index) => (
+                    <div
+                      key={index}
+                      className="p-3 rounded-lg bg-amber-50 border border-amber-200"
+                    >
+                      <p className="font-medium text-amber-900">
+                        {failed.email}
+                      </p>
+                      {failed.error && (
+                        <p className="text-sm text-amber-700 mt-1">
+                          {failed.error}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            {hasSuccessful && (
               <Button
                 type="button"
-                onClick={handleSendEmail}
-                disabled={isSendingEmail}
-                className="flex-1"
+                onClick={handleSendEmails}
+                disabled={isSendingEmails}
+                className="flex-1 sm:flex-initial"
               >
                 <Mail className="mr-2 h-4 w-4" />
-                {isSendingEmail ? "Sending..." : "Send Email"}
+                {isSendingEmails ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Sending...
+                  </>
+                ) : (
+                  `Send ${successfulInvitations.length} Email(s)`
+                )}
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleSuccess}
-              >
-                Close
-              </Button>
-            </div>
-          </div>
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleSuccess}
+              className="flex-1 sm:flex-initial"
+            >
+              Close
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     );
@@ -205,41 +399,23 @@ export function InviteMemberModal({
   // Show invitation form
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-2xl max-h-[90vh]">
         <DialogHeader>
-          <DialogTitle>Invite Member</DialogTitle>
+          <DialogTitle>Invite Members</DialogTitle>
           <DialogDescription>
-            Invite a user to access {connection?.name}
+            Invite one or more users to access {connection?.name} with the same role
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="email">Email Address *</Label>
-            <Input
-              id="email"
-              type="email"
-              {...register("email", {
-                required: "Email is required",
-                pattern: {
-                  value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-                  message: "Invalid email address",
-                },
-              })}
-              placeholder="user@example.com"
-            />
-            {errors.email && (
-              <p className="text-sm text-destructive">{errors.email.message}</p>
-            )}
-          </div>
-
+        <div className="space-y-6">
+          {/* Role selector - single for all emails */}
           <div className="space-y-2">
             <Label htmlFor="role">Role *</Label>
             <Select
+              value={role}
               onValueChange={(value) =>
-                setValue("role", value as Exclude<ConnectionRole, "owner">)
+                setRole(value as Exclude<ConnectionRole, "owner">)
               }
-              defaultValue="developer"
             >
               <SelectTrigger id="role">
                 <SelectValue placeholder="Select role" />
@@ -251,27 +427,90 @@ export function InviteMemberModal({
                 <SelectItem value="viewer">Viewer</SelectItem>
               </SelectContent>
             </Select>
-            {errors.role && (
-              <p className="text-sm text-destructive">{errors.role.message}</p>
-            )}
+            <p className="text-xs text-muted-foreground">
+              This role will be applied to all invited users
+            </p>
           </div>
 
-          <DialogFooter>
+          {/* Email inputs */}
+          <div className="space-y-4">
+            <Label>Email Addresses *</Label>
+            <div className="max-h-[300px] overflow-y-auto pr-4 space-y-3">
+              {emails.map((emailEntry, index) => (
+                <div
+                  key={emailEntry.id}
+                  className="flex items-start gap-2"
+                >
+                  <div className="flex-1">
+                    <Input
+                      type="email"
+                      value={emailEntry.email}
+                      onChange={(e) =>
+                        updateEmail(emailEntry.id, e.target.value)
+                      }
+                      placeholder="user@example.com"
+                      className={
+                        emailEntry.emailError ? "border-destructive" : ""
+                      }
+                    />
+                    {emailEntry.emailError && (
+                      <p className="text-sm text-destructive mt-1">
+                        {emailEntry.emailError}
+                      </p>
+                    )}
+                  </div>
+                  {emails.length > 1 && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => removeEmail(emailEntry.id)}
+                      className="flex-shrink-0 mt-0"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
+
             <Button
               type="button"
               variant="outline"
-              onClick={handleClose}
-              disabled={isSubmitting}
+              onClick={addEmail}
+              className="w-full"
             >
-              Cancel
+              <Plus className="mr-2 h-4 w-4" />
+              Add Another Email
             </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "Creating..." : "Create Invitation"}
-            </Button>
-          </DialogFooter>
-        </form>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleClose}
+            disabled={isSubmitting}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            onClick={onSubmit}
+            disabled={isSubmitting || emails.length === 0}
+          >
+            {isSubmitting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Creating...
+              </>
+            ) : (
+              `Create ${emails.length} Invitation${emails.length !== 1 ? "s" : ""}`
+            )}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
-

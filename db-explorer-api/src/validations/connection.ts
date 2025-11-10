@@ -60,14 +60,18 @@ export const updateConnectionSchema = z.object({
   { message: 'At least one field must be provided for update' }
 );
 
-// Invite member request schema
+// Invite member request schema (supports single email or multiple emails with same role)
 export const inviteMemberSchema = z.object({
-  email: z.string().email('Invalid email address'),
+  email: z.string().email('Invalid email address').optional(),
+  emails: z.array(z.string().email('Invalid email address')).min(1, 'At least one email is required').max(50, 'Cannot invite more than 50 users at once').optional(),
   role: connectionRoleSchema.refine(
     (role) => role !== 'owner',
     { message: 'Cannot invite users as owners. Ownership can only be transferred.' }
   ),
-});
+}).refine(
+  (data) => data.email || (data.emails && data.emails.length > 0),
+  { message: 'Either email or emails array must be provided' }
+);
 
 // Update member role request schema
 export const updateMemberRoleSchema = z.object({

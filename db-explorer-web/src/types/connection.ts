@@ -130,7 +130,8 @@ export interface UpdateConnectionRequest {
 }
 
 export interface InviteMemberRequest {
-  email: string;
+  email?: string;
+  emails?: string[];
   role: Exclude<ConnectionRole, 'owner'>;
 }
 

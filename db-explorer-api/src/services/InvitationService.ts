@@ -17,6 +17,68 @@ export class InvitationService extends BaseService {
   }
 
   /**
+   * Create bulk invitations to a connection
+   */
+  async createBulkInvitations(
+    connectionId: string,
+    invitations: Array<{ email: string; role: ConnectionRole }>,
+    invitedBy: string
+  ): Promise<ApiResponse<{ invitations: ConnectionInvitation[]; errors: Array<{ email: string; error: string }> }>> {
+    try {
+      // Check if user is owner or admin
+      const { data: memberData, error: memberError } = await supabaseAdmin
+        .from('connection_members')
+        .select('role')
+        .eq('connection_id', connectionId)
+        .eq('user_id', invitedBy)
+        .single();
+
+      if (memberError || !memberData) {
+        return {
+          success: false,
+          error: 'Access denied',
+        };
+      }
+
+      if (!['owner', 'admin'].includes(memberData.role)) {
+        return {
+          success: false,
+          error: 'Only owners and admins can invite members',
+        };
+      }
+
+      const results: ConnectionInvitation[] = [];
+      const errors: Array<{ email: string; error: string }> = [];
+
+      // Process invitations sequentially to avoid race conditions
+      for (const { email, role } of invitations) {
+        try {
+          const result = await this.createInvitation(connectionId, email, role, invitedBy);
+          if (result.success && result.data) {
+            results.push(result.data);
+          } else {
+            errors.push({ email, error: result.error || 'Failed to create invitation' });
+          }
+        } catch (error: any) {
+          errors.push({ email, error: error.message || 'Failed to create invitation' });
+        }
+      }
+
+      return {
+        success: true,
+        data: {
+          invitations: results,
+          errors,
+        },
+        message: `Successfully created ${results.length} invitation(s)${errors.length > 0 ? `, ${errors.length} failed` : ''}`,
+      };
+    } catch (error) {
+      console.error('Error in createBulkInvitations:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Create an invitation to a connection
    */
   async createInvitation(
