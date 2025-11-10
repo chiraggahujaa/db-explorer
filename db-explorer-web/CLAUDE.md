@@ -229,6 +229,77 @@ const onSubmit = async (data: FormData) => {
 - Create feature-specific types in `features/{name}/types/`
 - Maintain global types in `src/types/`
 
+### Reusable UI Components
+
+#### SearchableSelect
+A searchable combobox component for selecting from a list of options with search functionality.
+
+**Location**: `@/components/ui/searchable-select`
+
+**Usage**:
+```typescript
+import { SearchableSelect, type SearchableSelectOption } from "@/components/ui/searchable-select";
+
+const options: SearchableSelectOption[] = [
+  { value: "option1", label: "Option 1", icon: <Icon /> },
+  { value: "option2", label: "Option 2" },
+];
+
+<SearchableSelect
+  options={options}
+  value={selectedValue}
+  onValueChange={handleChange}
+  placeholder="Select option..."
+  searchPlaceholder="Search..."
+  emptyText="No options found"
+  disabled={false}
+  isLoading={false}
+  triggerClassName="flex-1"
+/>
+```
+
+**Props**:
+- `options`: Array of `SearchableSelectOption` objects with `value`, `label`, and optional `icon`
+- `value`: Currently selected value
+- `onValueChange`: Callback when selection changes
+- `placeholder`: Placeholder text when no selection
+- `searchPlaceholder`: Placeholder for search input
+- `emptyText`: Text shown when no options match search
+- `disabled`: Disable the select
+- `isLoading`: Show loading state
+- `triggerClassName`: Additional classes for trigger button
+- `popoverClassName`: Additional classes for popover content
+
+#### SearchInput
+A search input component with optional icon support.
+
+**Location**: `@/components/ui/search-input`
+
+**Usage**:
+```typescript
+import { SearchInput } from "@/components/ui/search-input";
+import { Filter } from "lucide-react";
+
+<SearchInput
+  placeholder="Search..."
+  value={searchValue}
+  onChange={(e) => setSearchValue(e.target.value)}
+  icon={<Filter className="w-4 h-4" />}
+  iconPosition="right" // or "left"
+  showIcon={true}
+/>
+```
+
+**Props**:
+- Extends standard `input` props
+- `icon`: Custom icon component (defaults to Search icon)
+- `iconPosition`: "left" or "right" (default: "left")
+- `showIcon`: Show/hide icon (default: true)
+
+**When to Use**:
+- Use `SearchableSelect` when you need a dropdown with search functionality (e.g., selecting schemas, connections, etc.)
+- Use `SearchInput` for simple text search/filter inputs (e.g., filtering tables, searching records)
+
 ### Import Organization
 ```typescript
 // External libraries first
@@ -238,6 +309,8 @@ import { useQuery } from "@tanstack/react-query";
 // UI components
 import { Card, CardContent } from "@/components/ui/card";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
+import { SearchableSelect } from "@/components/ui/searchable-select";
+import { SearchInput } from "@/components/ui/search-input";
 
 // API and utilities
 import { apiFunction } from "@/lib/api/feature";

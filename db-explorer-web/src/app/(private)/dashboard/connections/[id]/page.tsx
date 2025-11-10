@@ -1,13 +1,11 @@
 "use client";
 
-import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useParams } from "next/navigation";
-import { connectionsAPI, databaseExplorerAPI } from "@/lib/api/connections";
+import { connectionsAPI } from "@/lib/api/connections";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
-import { SchemaSidebar } from "@/components/connections/SchemaSidebar";
+import { ExplorerSidebar } from "@/components/connections/ExplorerSidebar";
 import { ChatInterface } from "@/components/connections/ChatInterface";
-import { toast } from "sonner";
 
 export default function ConnectionExplorerPage() {
   const params = useParams();
@@ -46,9 +44,7 @@ export default function ConnectionExplorerPage() {
   return (
     <div className="flex h-[calc(100vh-4rem)] overflow-hidden">
       {/* Left Sidebar */}
-      <div className="w-80 border-r bg-background overflow-y-auto">
-        <SchemaSidebar connectionId={connectionId} />
-      </div>
+      <ExplorerSidebar initialConnectionId={connectionId} />
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden">

@@ -43,3 +43,13 @@ bun run start
 - **State Management**: Zustand
 - **Forms**: React Hook Form + Zod
 - **Chat Access**: MCP server for natural language database queries
+
+## Reusable Components
+
+The project includes reusable UI components that should be used throughout the application:
+
+- **SearchableSelect** (`db-explorer-web/src/components/ui/searchable-select.tsx`): A searchable combobox for selecting from lists with search functionality. Use for dropdowns that need search (e.g., schema selection, connection selection).
+
+- **SearchInput** (`db-explorer-web/src/components/ui/search-input.tsx`): A search input component with optional icon support. Use for text search/filter inputs (e.g., table filtering, record searching).
+
+See `db-explorer-web/CLAUDE.md` for detailed usage examples and API documentation.
