@@ -547,12 +547,16 @@ export class InvitationService extends BaseService {
       const connectionId = (invitation as any).connectionId || (invitation as any).connection_id;
       const invitedBy = (invitation as any).invitedBy || (invitation as any).invited_by;
       
-      const { error: memberError } = await supabaseAdmin.from('connection_members').insert({
-        connection_id: connectionId,
-        user_id: userId,
-        role: invitation.role,
-        added_by: invitedBy,
-      });
+      // Use SECURITY DEFINER function to bypass RLS when adding member via invitation
+      const { data: memberId, error: memberError } = await supabaseAdmin.rpc(
+        'add_connection_member_via_invitation',
+        {
+          p_connection_id: connectionId,
+          p_user_id: userId,
+          p_role: invitation.role,
+          p_added_by: invitedBy,
+        }
+      );
 
       if (memberError) {
         throw new Error(`Database error: ${memberError.message}`);
@@ -632,13 +636,16 @@ export class InvitationService extends BaseService {
         };
       }
 
-      // Add user as member
-      const { error: memberError } = await supabaseAdmin.from('connection_members').insert({
-        connection_id: invitation.connection_id,
-        user_id: userId,
-        role: invitation.role,
-        added_by: invitation.invited_by,
-      });
+      // Add user as member using SECURITY DEFINER function to bypass RLS
+      const { data: memberId, error: memberError } = await supabaseAdmin.rpc(
+        'add_connection_member_via_invitation',
+        {
+          p_connection_id: invitation.connection_id,
+          p_user_id: userId,
+          p_role: invitation.role,
+          p_added_by: invitation.invited_by,
+        }
+      );
 
       if (memberError) {
         throw new Error(`Database error: ${memberError.message}`);
