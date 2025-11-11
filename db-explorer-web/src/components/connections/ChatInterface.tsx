@@ -19,9 +19,10 @@ import { cn } from "@/utils/ui";
 
 interface ChatInterfaceProps {
   connection: ConnectionWithRole;
+  onResetChatReady?: (resetChat: () => void) => void;
 }
 
-export function ChatInterface({ connection }: ChatInterfaceProps) {
+export function ChatInterface({ connection, onResetChatReady }: ChatInterfaceProps) {
   const [message, setMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isConfigOpen, setIsConfigOpen] = useState(false);
@@ -38,10 +39,17 @@ export function ChatInterface({ connection }: ChatInterfaceProps) {
   } = useConnectionExplorer();
 
   // WebSocket integration
-  const { sendMessage, sendTyping, isConnected } = useWebSocket({
+  const { sendMessage, sendTyping, isConnected, resetChat } = useWebSocket({
     connectionId: connection.id,
     autoConnect: true,
   });
+
+  // Expose resetChat to parent
+  useEffect(() => {
+    if (onResetChatReady && resetChat) {
+      onResetChatReady(resetChat);
+    }
+  }, [onResetChatReady, resetChat]);
 
   const messages = useChatMessages(connection.id);
   const connectionStatus = useConnectionStatus();

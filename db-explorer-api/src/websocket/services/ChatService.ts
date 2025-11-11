@@ -88,6 +88,13 @@ export class ChatService {
   }
 
   /**
+   * Clear message history for a connection
+   */
+  clearMessageHistory(connectionId: string): void {
+    this.messageHistory.delete(connectionId);
+  }
+
+  /**
    * Create typing indicator
    */
   createTypingIndicator(

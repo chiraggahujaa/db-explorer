@@ -230,11 +230,29 @@ export const useWebSocket = (options: UseWebSocketOptions) => {
     [wsService, setPending]
   );
 
+  // Reset chat session - creates a new chat by leaving and rejoining the room
+  const resetChat = useCallback(() => {
+    if (!connectionId || !wsService.isSocketConnected()) return;
+
+    // Clear messages for this connection
+    useChatStore.getState().clearMessages(connectionId);
+
+    // Leave current room
+    wsService.emit('connection:leave', { connectionId });
+
+    // Small delay to ensure leave is processed, then rejoin with newSession flag
+    setTimeout(() => {
+      wsService.emit('connection:join', { connectionId, newSession: true });
+      setCurrentConnection(connectionId);
+    }, 100);
+  }, [connectionId, wsService, setCurrentConnection]);
+
   return {
     sendMessage,
     sendTyping,
     updatePresence,
     retryMessage,
+    resetChat,
     isConnected: wsService.isSocketConnected(),
     connectionStatus: useChatStore.getState().connectionStatus,
   };

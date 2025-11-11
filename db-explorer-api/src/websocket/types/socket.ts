@@ -55,6 +55,8 @@ export interface ClientToServerEvents {
   'chat:typing:stop': (data: { connectionId: string }) => void;
   'presence:update': (data: { status: PresenceStatus['status']; connectionId: string }) => void;
   'chat:ack': (data: { messageId: string }) => void;
+  'connection:join': (data: { connectionId: string; newSession?: boolean }) => void;
+  'connection:leave': (data: { connectionId: string }) => void;
 }
 
 // Server → Client Events

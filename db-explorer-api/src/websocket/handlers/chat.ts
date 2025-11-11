@@ -83,9 +83,9 @@ export const registerChatHandlers = (
   /**
    * Join connection room when user connects to a specific connection
    */
-  socket.on('connection:join', async (data: { connectionId: string }) => {
+  socket.on('connection:join', async (data: { connectionId: string; newSession?: boolean }) => {
     try {
-      const { connectionId } = data;
+      const { connectionId, newSession = false } = data;
 
       // Validate connection belongs to user (check both created_by and connection_members)
       const { data: memberCheck } = await supabaseAdmin
@@ -111,11 +111,16 @@ export const registerChatHandlers = (
         return;
       }
 
+      // Clear history if this is a new session
+      if (newSession) {
+        chatService.clearMessageHistory(connectionId);
+      }
+
       // Join room for this connection
       socket.join(`connection:${connectionId}`);
       socket.data.connectionId = connectionId;
 
-      // Send message history
+      // Send message history (will be empty if newSession is true)
       const history = chatService.getMessageHistory(connectionId);
       socket.emit('chat:history', { messages: history });
 
@@ -123,7 +128,7 @@ export const registerChatHandlers = (
       const presenceService = chatService.getPresenceService();
       presenceService.updatePresence(userId, connectionId, 'online');
 
-      console.log(`[Chat] User ${userId} joined connection ${connectionId}`);
+      console.log(`[Chat] User ${userId} joined connection ${connectionId}${newSession ? ' (new session)' : ''}`);
     } catch (error: any) {
       console.error('[Chat] Error joining connection:', error);
     }

@@ -7,10 +7,12 @@ import { LoadingSpinner } from "@/components/common/LoadingSpinner";
 import { ExplorerSidebar } from "@/components/connections/ExplorerSidebar";
 import { ChatInterface } from "@/components/connections/ChatInterface";
 import { ConnectionExplorerProvider } from "@/contexts/ConnectionExplorerContext";
+import { useRef } from "react";
 
 export default function ConnectionExplorerPage() {
   const params = useParams();
   const connectionId = params.id as string;
+  const resetChatRef = useRef<(() => void) | null>(null);
 
   const { data: connection, isLoading: isLoadingConnection } = useQuery({
     queryKey: ["connection", connectionId],
@@ -46,11 +48,19 @@ export default function ConnectionExplorerPage() {
     <ConnectionExplorerProvider>
       <div className="flex h-[calc(100vh-4rem)] overflow-hidden">
         {/* Left Sidebar */}
-        <ExplorerSidebar initialConnectionId={connectionId} />
+        <ExplorerSidebar 
+          initialConnectionId={connectionId}
+          onNewChat={() => resetChatRef.current?.()}
+        />
 
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          <ChatInterface connection={connection} />
+          <ChatInterface 
+            connection={connection}
+            onResetChatReady={(resetChat) => {
+              resetChatRef.current = resetChat;
+            }}
+          />
         </div>
       </div>
     </ConnectionExplorerProvider>

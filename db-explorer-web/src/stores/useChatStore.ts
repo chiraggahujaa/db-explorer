@@ -37,6 +37,7 @@ interface ChatState {
   setCurrentConnection: (connectionId: string | null) => void;
   clearMessages: (connectionId?: string) => void;
   loadHistory: (messages: ChatMessage[]) => void;
+  resetChat: (connectionId: string) => void;
 }
 
 export const useChatStore = create<ChatState>()(
@@ -143,6 +144,41 @@ export const useChatStore = create<ChatState>()(
             newMessages.set(message.messageId, message);
           });
           return { messages: newMessages };
+        }),
+
+      resetChat: (connectionId) =>
+        set((state) => {
+          // Clear messages for this connection
+          const newMessages = new Map(state.messages);
+          const newPending = new Set(state.pendingMessages);
+          const newTyping = new Map(state.typingUsers);
+          const newPresence = new Map(state.presence);
+
+          state.messages.forEach((message, messageId) => {
+            if (message.connectionId === connectionId) {
+              newMessages.delete(messageId);
+              newPending.delete(messageId);
+            }
+          });
+
+          // Clear typing indicators for this connection
+          newTyping.delete(connectionId);
+
+          // Clear presence for this connection
+          const keysToDelete: string[] = [];
+          newPresence.forEach((presence, key) => {
+            if (presence.connectionId === connectionId) {
+              keysToDelete.push(key);
+            }
+          });
+          keysToDelete.forEach((key) => newPresence.delete(key));
+
+          return {
+            messages: newMessages,
+            pendingMessages: newPending,
+            typingUsers: newTyping,
+            presence: newPresence,
+          };
         }),
     }),
     { name: 'chat-store' }
