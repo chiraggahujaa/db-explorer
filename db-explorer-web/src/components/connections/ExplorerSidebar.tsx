@@ -11,6 +11,7 @@ import {
   Filter,
   Table as TableIcon,
   Loader2,
+  Check,
 } from "lucide-react";
 import { databaseExplorerAPI, type Table, type Schema } from "@/lib/api/connections";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
@@ -19,6 +20,7 @@ import { SearchableSelect, type SearchableSelectOption } from "@/components/ui/s
 import { SearchInput } from "@/components/ui/search-input";
 import { cn } from "@/utils/ui";
 import { toast } from "sonner";
+import { useConnectionExplorer } from "@/contexts/ConnectionExplorerContext";
 
 type SidebarView = "database" | "recents";
 
@@ -27,9 +29,15 @@ interface ExplorerSidebarProps {
 }
 
 export function ExplorerSidebar({ initialConnectionId }: ExplorerSidebarProps) {
+  const {
+    selectedSchema,
+    selectedTables,
+    setSelectedSchema,
+    toggleTable,
+  } = useConnectionExplorer();
+  
   const [activeView, setActiveView] = useState<SidebarView>("database");
   const [isDatabaseSidebarOpen, setIsDatabaseSidebarOpen] = useState(true);
-  const [selectedSchemaName, setSelectedSchemaName] = useState<string | undefined>();
   const [tableFilter, setTableFilter] = useState("");
   const [loadedTables, setLoadedTables] = useState<Table[]>([]);
   const [isLoadingTables, setIsLoadingTables] = useState(false);
@@ -52,25 +60,25 @@ export function ExplorerSidebar({ initialConnectionId }: ExplorerSidebarProps) {
 
   // Reset schema selection when connection changes
   useEffect(() => {
-    setSelectedSchemaName(undefined);
+    setSelectedSchema(undefined);
     setLoadedTables([]);
-  }, [initialConnectionId]);
+  }, [initialConnectionId, setSelectedSchema]);
 
   // Auto-select schema if only one exists
   useEffect(() => {
-    if (schemasData && schemasData.length === 1 && !selectedSchemaName) {
-      setSelectedSchemaName(schemasData[0].name);
+    if (schemasData && schemasData.length === 1 && !selectedSchema) {
+      setSelectedSchema(schemasData[0].name);
     }
-  }, [schemasData, selectedSchemaName]);
+  }, [schemasData, selectedSchema, setSelectedSchema]);
 
   // Load tables when schema is selected
   useEffect(() => {
-    if (selectedSchemaName && initialConnectionId) {
-      loadTables(initialConnectionId, selectedSchemaName);
+    if (selectedSchema && initialConnectionId) {
+      loadTables(initialConnectionId, selectedSchema);
     } else {
       setLoadedTables([]);
     }
-  }, [selectedSchemaName, initialConnectionId]);
+  }, [selectedSchema, initialConnectionId]);
 
   const loadTables = async (connectionId: string, schemaName: string) => {
     setIsLoadingTables(true);
@@ -97,9 +105,9 @@ export function ExplorerSidebar({ initialConnectionId }: ExplorerSidebarProps) {
   const handleSchemaChange = useCallback((schemaName: string) => {
     // Use setTimeout to ensure Select portal closes before state updates
     setTimeout(() => {
-      setSelectedSchemaName(schemaName);
+      setSelectedSchema(schemaName);
     }, 0);
-  }, []);
+  }, [setSelectedSchema]);
 
   const schemas = useMemo(() => {
     return schemasData || [];
@@ -170,7 +178,7 @@ export function ExplorerSidebar({ initialConnectionId }: ExplorerSidebarProps) {
               <SearchableSelect
                 key={`schema-select-${initialConnectionId}`}
                 options={schemaOptions}
-                value={selectedSchemaName}
+                value={selectedSchema}
                 onValueChange={handleSchemaChange}
                 placeholder="Select schema"
                 emptyText="No schemas found"
@@ -208,12 +216,12 @@ export function ExplorerSidebar({ initialConnectionId }: ExplorerSidebarProps) {
             </div>
 
             {/* Filter Input */}
-            <SearchInput
+              <SearchInput
               placeholder="Filter"
               value={tableFilter}
               onChange={(e) => setTableFilter(e.target.value)}
               className="h-9"
-              disabled={!selectedSchemaName}
+              disabled={!selectedSchema}
               icon={<Filter className="w-4 h-4 text-muted-foreground" />}
               iconPosition="right"
             />
@@ -229,7 +237,7 @@ export function ExplorerSidebar({ initialConnectionId }: ExplorerSidebarProps) {
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
               </div>
-            ) : !selectedSchemaName ? (
+            ) : !selectedSchema ? (
               <div className="p-4 text-center text-sm text-muted-foreground">
                 Select a schema to see tables
               </div>
@@ -250,16 +258,33 @@ export function ExplorerSidebar({ initialConnectionId }: ExplorerSidebarProps) {
                   </span>
                 </div>
                 <div className="space-y-0.5">
-                  {filteredTables.map((table) => (
-                    <div
-                      key={`${table.schema || "default"}-${table.name}`}
-                      className="flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-accent cursor-pointer group"
-                    >
-                      <ChevronRight className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                      <TableIcon className="w-4 h-4 text-muted-foreground shrink-0" />
-                      <span className="truncate">{table.name}</span>
-                    </div>
-                  ))}
+                  {filteredTables.map((table) => {
+                    const isSelected = selectedTables.has(table.name);
+                    return (
+                      <div
+                        key={`${table.schema || "default"}-${table.name}`}
+                        onClick={() => toggleTable(table.name)}
+                        className={cn(
+                          "flex items-center gap-2 px-2 py-1.5 rounded-md text-sm cursor-pointer group transition-colors",
+                          isSelected
+                            ? "bg-primary/10 hover:bg-primary/15 border border-primary/20"
+                            : "hover:bg-accent"
+                        )}
+                      >
+                        <div className="w-4 h-4 flex items-center justify-center shrink-0">
+                          {isSelected ? (
+                            <Check className="w-3.5 h-3.5 text-primary" />
+                          ) : (
+                            <ChevronRight className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                          )}
+                        </div>
+                        <TableIcon className="w-4 h-4 text-muted-foreground shrink-0" />
+                        <span className={cn("truncate", isSelected && "font-medium")}>
+                          {table.name}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}

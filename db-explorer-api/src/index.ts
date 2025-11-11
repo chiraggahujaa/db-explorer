@@ -1,6 +1,7 @@
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import * as dotenv from 'dotenv';
+import { createServer } from 'http';
 
 // Import routes
 import authRoutes from './routes/auth.js';
@@ -25,6 +26,9 @@ import {
   requestTimeout,
   validateContentType,
 } from './middleware/security.js';
+
+// Import WebSocket
+import { initializeWebSocket, shutdownWebSocket, getWebSocketServer } from './websocket/server.js';
 
 const environment = process.env.NODE_ENV || 'development';
 console.log(`Loading environment: ${environment}`);
@@ -77,6 +81,22 @@ app.get('/health', (req: Request, res: Response) => {
   });
 });
 
+// WebSocket health check route
+app.get('/api/websocket/health', (req: Request, res: Response) => {
+  const io = getWebSocketServer();
+  const connectedClients = io ? io.sockets.sockets.size : 0;
+  
+  res.json({
+    status: 'OK',
+    websocket: {
+      enabled: true,
+      connectedClients,
+      uptime: process.uptime(),
+    },
+    timestamp: new Date().toISOString(),
+  });
+});
+
 // API routes with specific rate limits
 app.use('/api/auth', authRateLimit, authRoutes);
 app.use('/api/users', apiRateLimit, userRoutes);
@@ -99,16 +119,30 @@ app.use(errorHandler);
 // Graceful shutdown
 process.on('SIGTERM', () => {
   console.log('SIGTERM received, shutting down gracefully...');
-  process.exit(0);
+  shutdownWebSocket();
+  server.close(() => {
+    console.log('HTTP server closed');
+    process.exit(0);
+  });
 });
 
 process.on('SIGINT', () => {
   console.log('SIGINT received, shutting down gracefully...');
-  process.exit(0);
+  shutdownWebSocket();
+  server.close(() => {
+    console.log('HTTP server closed');
+    process.exit(0);
+  });
 });
 
+// Create HTTP server
+const httpServer = createServer(app);
+
+// Initialize WebSocket server
+initializeWebSocket(httpServer);
+
 // Start server
-const server = app.listen(PORT, () => {
+const server = httpServer.listen(PORT, () => {
   const env = process.env.NODE_ENV || 'development';
   
   let baseUrl;
@@ -122,6 +156,7 @@ const server = app.listen(PORT, () => {
   console.log(`📊 Environment: ${env}`);
   console.log(`🌐 Health check: ${baseUrl}/health`);
   console.log(`📖 API Base URL: ${baseUrl}/api`);
+  console.log(`🔌 WebSocket server initialized`);
 });
 
 // Handle server errors

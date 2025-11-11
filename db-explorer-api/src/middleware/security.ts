@@ -32,7 +32,7 @@ export const generalRateLimit = createRateLimit(
 // This prevents brute force attacks on login/password reset endpoints
 export const authRateLimit = createRateLimit(
   15 * 60 * 1000, // 15 minutes
-  5,
+  20,
   'Too many authentication attempts, please try again later'
 );
 

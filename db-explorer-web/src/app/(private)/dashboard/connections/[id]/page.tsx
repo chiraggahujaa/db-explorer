@@ -6,6 +6,7 @@ import { connectionsAPI } from "@/lib/api/connections";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
 import { ExplorerSidebar } from "@/components/connections/ExplorerSidebar";
 import { ChatInterface } from "@/components/connections/ChatInterface";
+import { ConnectionExplorerProvider } from "@/contexts/ConnectionExplorerContext";
 
 export default function ConnectionExplorerPage() {
   const params = useParams();
@@ -16,7 +17,7 @@ export default function ConnectionExplorerPage() {
     queryFn: async () => {
       const result = await connectionsAPI.getConnection(connectionId);
       if (!result.success) {
-        throw new Error(result.error || "Failed to fetch connection");
+        throw new Error(result.message || "Failed to fetch connection");
       }
       return result.data;
     },
@@ -42,15 +43,17 @@ export default function ConnectionExplorerPage() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] overflow-hidden">
-      {/* Left Sidebar */}
-      <ExplorerSidebar initialConnectionId={connectionId} />
+    <ConnectionExplorerProvider>
+      <div className="flex h-[calc(100vh-4rem)] overflow-hidden">
+        {/* Left Sidebar */}
+        <ExplorerSidebar initialConnectionId={connectionId} />
 
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <ChatInterface connection={connection} />
+        {/* Main Content Area */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <ChatInterface connection={connection} />
+        </div>
       </div>
-    </div>
+    </ConnectionExplorerProvider>
   );
 }
 
