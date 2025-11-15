@@ -9,6 +9,7 @@ import { useMCPStore } from '@/stores/useMCPStore';
 import { mapConnectionConfigToMCP } from '@/utils/mcpMapper';
 import type { ConnectionWithRole } from '@/types/connection';
 import { v4 as uuidv4 } from 'uuid';
+import { toast } from 'sonner';
 
 interface UseMCPOptions {
   connection: ConnectionWithRole | null;
@@ -98,7 +99,10 @@ export const useMCP = (options: UseMCPOptions) => {
       } catch (error) {
         console.error('[useMCP] Failed to initialize:', error);
         // Show error but allow user to see it's trying
-        alert(`Failed to connect to database: ${error instanceof Error ? error.message : 'Unknown error'}\n\nThe MCP server might not be running or configured correctly.`);
+        toast.error('Database Connection Failed', {
+          description: `${error instanceof Error ? error.message : 'Unknown error'}. The MCP server might not be running or configured correctly.`,
+          duration: 6000,
+        });
         setIsConnected(false);
         setIsConnecting(false);
         initializeCompletedRef.current = false;
@@ -133,14 +137,6 @@ export const useMCP = (options: UseMCPOptions) => {
       const messageId = uuidv4();
       const query: MCPQueryRequest = { tool, arguments: args };
 
-      // Check permission cache first
-      if (args.table) {
-        const hasPermission = checkPermissionCache(tool, args.table);
-        if (!hasPermission) {
-          // Might require permission - let the service handle it
-        }
-      }
-
       // Add streaming message
       addStreamingMessage({
         messageId,
@@ -167,7 +163,7 @@ export const useMCP = (options: UseMCPOptions) => {
               break;
 
             case 'permission_request':
-              // Add permission request
+              // Add permission request (only for actual server-side permission requests)
               addPermissionRequest({
                 messageId,
                 connectionId: connection.id,
@@ -207,7 +203,6 @@ export const useMCP = (options: UseMCPOptions) => {
       completeStreaming,
       setStreamingError,
       addPermissionRequest,
-      checkPermissionCache,
     ]
   );
 
