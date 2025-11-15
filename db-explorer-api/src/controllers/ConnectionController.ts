@@ -94,6 +94,58 @@ export class ConnectionController {
   }
 
   /**
+   * Get full connection config with credentials (for MCP initialization)
+   * GET /api/connections/:id/credentials
+   * TODO: This currently returns raw DB credentials (including passwords);
+   *       we should replace this with a safer mechanism that doesn't send
+   *       secrets back to the client.
+   */
+  async getConnectionCredentials(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          error: 'User not authenticated',
+        });
+      }
+
+      const { id } = req.params;
+      uuidSchema.parse(id);
+
+      // Use internal method to get unsanitized config
+      if (typeof id !== 'string') {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid connection ID',
+        });
+      }
+      const result = await this.connectionService.getConnectionByIdInternal(id, userId);
+
+      if (!result.success) {
+        return res.status(404).json(result);
+      }
+
+      res.status(200).json(result);
+    } catch (error: any) {
+      console.error('Get connection credentials error:', error);
+
+      if (error.name === 'ZodError') {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid connection ID',
+          details: error.issues,
+        });
+      }
+
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error',
+      });
+    }
+  }
+
+  /**
    * Create a new connection
    * POST /api/connections
    */

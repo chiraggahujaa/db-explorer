@@ -84,15 +84,15 @@ export class ConfigManager {
   }
 
   private loadConfig(): Config {
-    const databases = this.discoverDatabases();
+    // Start with empty databases - connections are added dynamically
+    const databases: Record<string, any> = {};
 
-    if (Object.keys(databases).length === 0) {
-      throw new Error('No databases found. Please configure at least one database using DB_TYPE_1, DB_HOST_1, etc.');
-    }
+    console.log('✓ MCP Server configured for dynamic connections only');
+    console.log('  Connections will be configured via configure_connection tool from frontend');
 
     const configData = {
       databases,
-      defaultDatabase: process.env.DEFAULT_DATABASE || Object.keys(databases)[0],
+      defaultDatabase: undefined,
       security: {
         maxQueryResults: parseInt(process.env.MAX_QUERY_RESULTS || '1000'),
         allowDataModification: process.env.ALLOW_DATA_MODIFICATION !== 'false',
@@ -239,8 +239,8 @@ export class ConfigManager {
     return Object.keys(this.config.databases);
   }
 
-  getDefaultDatabase(): string {
-    return this.config.defaultDatabase || this.getDatabaseList()[0] || 'db_1';
+  getDefaultDatabase(): string | undefined {
+    return this.config.defaultDatabase || this.getDatabaseList()[0] || undefined;
   }
 
   isReadOnlyMode(): boolean {

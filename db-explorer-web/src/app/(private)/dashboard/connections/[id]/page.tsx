@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useParams } from "next/navigation";
 import { connectionsAPI } from "@/lib/api/connections";
@@ -7,12 +8,13 @@ import { LoadingSpinner } from "@/components/common/LoadingSpinner";
 import { ExplorerSidebar } from "@/components/connections/ExplorerSidebar";
 import { ChatInterface } from "@/components/connections/ChatInterface";
 import { ConnectionExplorerProvider } from "@/contexts/ConnectionExplorerContext";
-import { useRef } from "react";
+import { getClaudeService } from "@/services/ClaudeService";
+import { useMCPStore } from "@/stores/useMCPStore";
 
 export default function ConnectionExplorerPage() {
   const params = useParams();
   const connectionId = params.id as string;
-  const resetChatRef = useRef<(() => void) | null>(null);
+  const [chatSessionKey, setChatSessionKey] = useState(0);
 
   const { data: connection, isLoading: isLoadingConnection } = useQuery({
     queryKey: ["connection", connectionId],
@@ -25,6 +27,27 @@ export default function ConnectionExplorerPage() {
     },
     enabled: !!connectionId,
   });
+
+  const handleNewChat = useCallback(() => {
+    if (!connectionId) {
+      return;
+    }
+
+    try {
+      const claudeService = getClaudeService();
+      claudeService.clearHistory();
+    } catch (error) {
+      console.warn("[ConnectionExplorerPage] Unable to clear Claude history:", error);
+    }
+
+    try {
+      useMCPStore.getState().clearMCPState(connectionId);
+    } catch (error) {
+      console.error("[ConnectionExplorerPage] Failed to clear MCP state:", error);
+    }
+
+    setChatSessionKey((prev) => prev + 1);
+  }, [connectionId]);
 
   if (isLoadingConnection) {
     return (
@@ -45,22 +68,17 @@ export default function ConnectionExplorerPage() {
   }
 
   return (
-    <ConnectionExplorerProvider>
+    <ConnectionExplorerProvider key={chatSessionKey}>
       <div className="flex h-[calc(100vh-4rem)] overflow-hidden">
         {/* Left Sidebar */}
         <ExplorerSidebar 
           initialConnectionId={connectionId}
-          onNewChat={() => resetChatRef.current?.()}
+          onNewChat={handleNewChat}
         />
 
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          <ChatInterface 
-            connection={connection}
-            onResetChatReady={(resetChat) => {
-              resetChatRef.current = resetChat;
-            }}
-          />
+          <ChatInterface connection={connection} />
         </div>
       </div>
     </ConnectionExplorerProvider>

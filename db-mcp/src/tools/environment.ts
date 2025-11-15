@@ -4,7 +4,7 @@ import { databaseManager } from '../database.js';
 
 // Schema for switching environment
 export const switchEnvironmentSchema = z.object({
-  environment: z.string().describe('Database ID to switch to (e.g., db_1, db_2, etc.)'),
+  environment: z.string().describe('Connection ID to switch to (UUID from configure_connection)'),
 });
 
 // Schema for listing environments

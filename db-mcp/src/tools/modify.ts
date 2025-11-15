@@ -1,6 +1,10 @@
 import { z } from 'zod';
 import { databaseManager } from '../database.js';
 import { configManager } from '../config.js';
+import {
+  requiresPermissionForModification,
+  createPermissionRequest,
+} from '../utils/permissions.js';
 
 export const insertRecordSchema = z.object({
   table: z.string().describe('Table name to insert into'),
@@ -46,6 +50,12 @@ export async function insertRecord(args: z.infer<typeof insertRecordSchema>) {
   try {
     validateNotReadOnly();
 
+    // Check if permission is required
+    const permissionRequest = requiresPermissionForModification(args.table, 'INSERT');
+    if (permissionRequest) {
+      return createPermissionRequest(permissionRequest);
+    }
+
     const columns = Object.keys(args.data);
     const values = Object.values(args.data);
     const placeholders = columns.map(() => '?').join(', ');
@@ -81,6 +91,12 @@ export async function insertRecord(args: z.infer<typeof insertRecordSchema>) {
 export async function updateRecord(args: z.infer<typeof updateRecordSchema>) {
   try {
     validateNotReadOnly();
+
+    // Check if permission is required
+    const permissionRequest = requiresPermissionForModification(args.table, 'UPDATE');
+    if (permissionRequest) {
+      return createPermissionRequest(permissionRequest);
+    }
 
     const setClause = Object.keys(args.data)
       .map(key => `\`${key}\` = ?`)
@@ -129,6 +145,12 @@ export async function deleteRecord(args: z.infer<typeof deleteRecordSchema>) {
           },
         ],
       };
+    }
+
+    // Check if permission is required (always for DELETE)
+    const permissionRequest = requiresPermissionForModification(args.table, 'DELETE');
+    if (permissionRequest) {
+      return createPermissionRequest(permissionRequest);
     }
 
     let countSql = `SELECT COUNT(*) as count FROM \`${args.table}\` WHERE ${args.where}`;
@@ -190,6 +212,12 @@ export async function bulkInsert(args: z.infer<typeof bulkInsertSchema>) {
           },
         ],
       };
+    }
+
+    // Check if permission is required
+    const permissionRequest = requiresPermissionForModification(args.table, 'INSERT');
+    if (permissionRequest) {
+      return createPermissionRequest(permissionRequest);
     }
 
     const firstRecord = args.data[0];
