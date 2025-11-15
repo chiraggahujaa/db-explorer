@@ -12,6 +12,7 @@ router.use(authenticateToken);
 
 // Connection CRUD routes
 router.get('/', connectionController.getMyConnections.bind(connectionController));
+router.get('/:id/credentials', connectionController.getConnectionCredentials.bind(connectionController)); // Must come before /:id
 router.get('/:id', connectionController.getConnection.bind(connectionController));
 router.post('/', connectionController.createConnection.bind(connectionController));
 router.patch('/:id', connectionController.updateConnection.bind(connectionController));

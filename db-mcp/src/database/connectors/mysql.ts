@@ -12,12 +12,11 @@ export class MySQLConnection extends BaseDatabaseConnection {
         await this.disconnect();
       }
 
-      this.pool = mysql.createPool({
+      const poolConfig: any = {
         host: this.config.host,
         port: this.config.port,
         user: this.config.user,
         password: this.config.password,
-        database: this.config.database,
         connectionLimit: CONNECTION_DEFAULTS.connectionLimit,
         idleTimeout: CONNECTION_DEFAULTS.idleTimeout,
         queueLimit: CONNECTION_DEFAULTS.queueLimit,
@@ -29,15 +28,40 @@ export class MySQLConnection extends BaseDatabaseConnection {
         timezone: CONNECTION_DEFAULTS.timezone,
         debug: CONNECTION_DEFAULTS.debug,
         multipleStatements: CONNECTION_DEFAULTS.multipleStatements,
-      });
+      };
 
-      // Test the connection
+      // Try to connect with database if specified
+      if (this.config.database) {
+        poolConfig.database = this.config.database;
+        
+        try {
+          this.pool = mysql.createPool(poolConfig);
+          const connection = await this.pool.getConnection();
+          await connection.ping();
+          connection.release();
+          this.setConnected(true);
+          console.log(`✓ MySQL connection established: ${this.id} (database: ${this.config.database})`);
+          return;
+        } catch (dbError: any) {
+          // If database doesn't exist, try without it
+          if (dbError.code === 'ER_BAD_DB_ERROR') {
+            console.log(`⚠️  Database '${this.config.database}' not found, connecting without database selection`);
+            await this.pool?.end();
+            delete poolConfig.database;
+          } else {
+            throw dbError;
+          }
+        }
+      }
+
+      // Connect without database (either not specified or failed above)
+      this.pool = mysql.createPool(poolConfig);
       const connection = await this.pool.getConnection();
       await connection.ping();
       connection.release();
 
       this.setConnected(true);
-      console.log(`✓ MySQL connection established: ${this.id}`);
+      console.log(`✓ MySQL connection established: ${this.id} (no database selected - use listDatabases to see available)`);
     } catch (error) {
       this.logError('connect', error);
       this.setConnected(false, error instanceof Error ? error.message : String(error));
@@ -53,8 +77,11 @@ export class MySQLConnection extends BaseDatabaseConnection {
       }
       this.setConnected(false);
     } catch (error) {
+      // Log the error but don't throw - we're closing the connection anyway
+      // This can happen if the pool was created with a non-existent database
       this.logError('disconnect', error);
-      throw error;
+      this.pool = undefined; // Force cleanup
+      this.setConnected(false);
     }
   }
 

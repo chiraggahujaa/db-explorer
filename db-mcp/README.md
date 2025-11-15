@@ -1,171 +1,295 @@
 # Multi-Database MCP Server
 
-A Model Context Protocol (MCP) server supporting MySQL, PostgreSQL, SQLite, and Supabase with fault-tolerant architecture and security features.
+A Bun-powered Model Context Protocol (MCP) server with support for MySQL, PostgreSQL, SQLite, MongoDB, and Supabase. Features dynamic connection management, intelligent permissions, and 40+ database tools.
 
-## Features
+## 🌟 Features
 
 ### Database Support
 - **MySQL/MariaDB**: Full SQL support with connection pooling
-- **PostgreSQL**: Native support using Bun.sql with JSON/JSONB
+- **PostgreSQL**: Native support with JSON/JSONB
 - **SQLite**: File-based and in-memory databases
-- **Supabase**: REST API integration with real-time capabilities
+- **MongoDB**: Document database support
+- **Supabase**: PostgreSQL with real-time capabilities
 
-### Security & Reliability
-- SQL injection detection and query validation
-- Rate limiting and access controls
-- Independent connection management with auto-retry
-- Health monitoring with graceful degradation
-- Audit logging and security reporting
+### Key Capabilities
+- **Dynamic Connections**: Configure databases on-the-fly from frontend
+- **Smart Permissions**: Automatic prompts for sensitive operations
+- **Security**: SQL injection detection, rate limiting, audit logging
+- **Fault Tolerance**: Auto-retry, health monitoring, graceful degradation
+- **Structured Logging**: Beautiful, informative console output
 
-## Prerequisites
+## 🚀 Quick Start
 
-### Install Bun
-This project requires Bun runtime. Install it using:
-
-**macOS/Linux:**
+### Prerequisites
 ```bash
+# Install Bun
 curl -fsSL https://bun.sh/install | bash
-```
 
-**Windows:**
-```powershell
-powershell -c "irm bun.sh/install.ps1 | iex"
-```
-
-After installation, restart your terminal and verify with:
-```bash
+# Verify installation
 bun --version
 ```
 
-## Setup
-
-### 1. Install Dependencies
+### Installation
 ```bash
+# Install dependencies
 bun install
+
+# Start server
+bun run dev
 ```
 
-### 2. Configure Environment
-Create `.env` file with your database connections:
+Server starts on `http://localhost:3002`
+
+## 📝 Configuration
+
+### Environment Variables (.env)
 ```bash
-cp .env.example .env
-# Edit .env with your database credentials
+# Server Configuration
+MCP_SERVER_PORT=3002
+NODE_ENV=development
+LOG_LEVEL=info
+
+# Query Settings
+MAX_QUERY_RESULTS=1000
+QUERY_TIMEOUT_MS=30000
+
+# Security Settings
+READ_ONLY_MODE=false
+ALLOW_DATA_MODIFICATION=true
+ALLOW_DROP=false
+ALLOW_TRUNCATE=false
 ```
 
-### 3. Start Server
-```bash
-bun run start
-```
+### Dynamic Connection Management
 
-### 4. Claude Desktop Integration
-Add to your Claude Desktop MCP settings:
+**Note**: This server uses **dynamic connections** configured from the frontend. Static environment-based connections are not supported.
 
-**macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-**Windows**: `%AppData%\Claude\claude_desktop_config.json` (or `C:\Users\{username}\AppData\Roaming\Claude\claude_desktop_config.json`)
-
-```json
+Connections are configured via the `configure_connection` tool:
+```javascript
 {
-  "mcpServers": {
-    "db-mcp": {
-      "command": "/Users/{user}/.bun/bin/bun", // Use full path - run `which bun` to get your specific path
-      "args": ["run", "start"],
-      "cwd": "/path/to/your/db-mcp",
-      "env": {
-        "NODE_ENV": "production",
-        "DEFAULT_DATABASE": "db_1",
-        "READ_ONLY_MODE": "false",
-        "MAX_QUERY_RESULTS": "1000",
-        "DB_TYPE_1": "mysql",
-        "DB_HOST_1": "localhost",
-        "DB_PORT_1": "3306",
-        "DB_USER_1": "root",
-        "DB_PASSWORD_1": "your_password",
-        "DB_NAME_1": "your_database"
-      }
-    }
+  "connectionId": "conn-123",
+  "config": {
+    "type": "mysql",
+    "host": "localhost",
+    "port": 3306,
+    "user": "root",
+    "password": "password",
+    "database": "mydb"
   }
 }
 ```
 
-**Note**: Replace the environment variables with your actual database credentials. You can configure multiple databases using the numbered pattern (DB_TYPE_2, DB_HOST_2, etc.).
+## 🛠️ Available Tools (40+)
 
-Restart Claude Desktop to activate the database server.
+### Schema & Structure
+- `list_databases` - List all available databases
+- `list_tables` - List tables in a database
+- `describe_table` - Get detailed table schema
+- `show_indexes` - Show table indexes
+- `analyze_foreign_keys` - Analyze foreign key relationships
+- `get_table_dependencies` - Get table dependency tree
 
-## Configuration
+### Data Query
+- `select_data` - Execute SELECT with advanced filtering
+- `count_records` - Count records with conditions
+- `find_by_id` - Find records by ID or primary key
+- `search_records` - Full-text search across columns
+- `get_recent_records` - Get recently created/modified records
+- `execute_custom_query` - Execute custom SQL safely
 
-Uses numbered environment variables (`DB_TYPE_1`, `DB_HOST_1`, etc.) for multi-database configuration:
+### Data Modification (with permissions)
+- `insert_record` - Insert single record
+- `update_record` - Update records with WHERE conditions
+- `delete_record` - Delete records with safety checks
+- `bulk_insert` - Insert multiple records efficiently
 
-```bash
-# MySQL
-DB_TYPE_1=mysql
-DB_HOST_1=localhost
-DB_PORT_1=3306
-DB_USER_1=username
-DB_PASSWORD_1=password
-DB_NAME_1=database
+### Analysis & Relationships
+- `join_tables` - Execute JOIN queries across tables
+- `find_orphaned_records` - Find records without valid foreign keys
+- `validate_referential_integrity` - Check constraint violations
+- `analyze_table_relationships` - Map table relationships
+- `get_column_statistics` - Get statistical information
 
-# PostgreSQL
-DB_TYPE_2=postgresql
-DB_CONNECTION_STRING_2=postgresql://user:pass@host:5432/dbname
+### Tenant Management
+- `list_tenants` - List all tenant databases
+- `switch_tenant_context` - Switch active tenant database
+- `get_tenant_schema` - Get complete tenant schema
+- `compare_tenant_data` - Compare data across tenants
+- `get_tenant_tables` - Get tables and counts for tenant
 
-# SQLite
-DB_TYPE_3=sqlite
-DB_FILE_3=/path/to/database.db
+### Utility & Maintenance
+- `explain_query` - Get query execution plan
+- `check_table_status` - Get table status (size, rows, engine)
+- `optimize_table` - Optimize table for performance
+- `backup_table_structure` - Export table DDL
+- `test_connection` - Test database health
+- `show_connections` - Show available connections
+- `get_database_size` - Get database size and storage
 
-# Supabase
-DB_TYPE_4=supabase
-DB_PROJECT_URL_4=https://your-project.supabase.co
-DB_ANON_KEY_4=your_anon_key
+### Configuration
+- `configure_connection` - Configure database connection dynamically
 
-# Global settings
-DEFAULT_DATABASE=db_1
-READ_ONLY_MODE=false
-MAX_QUERY_RESULTS=1000
-```
+## 🔒 Security Features
 
-## Usage
+### Permission System
+Automatic permission prompts for:
+- DELETE operations (always)
+- Sensitive tables (users, passwords, auth, sessions)
+- Large queries (>1000 rows)
+- Schema modifications (DROP, TRUNCATE, ALTER)
 
-```bash
-# Start server
-bun run start
+### Security Policies
+- SQL injection detection
+- Query validation and sanitization
+- Rate limiting per connection
+- Configurable read-only mode
+- Audit logging for all operations
 
-# Development mode
-bun run dev
-```
+## 📊 Usage Examples
 
-### Basic Operations
+### Query Data
 ```javascript
-// Switch databases
-await switchEnvironment({ databaseId: 'db_2' })
+// List all tables
+await callTool('list_tables', {})
 
-// List tables
-await listTables({ databaseId: 'db_1' })
+// Describe table structure
+await callTool('describe_table', { table: 'users' })
 
-// Query data
-await selectData({
-  table: 'users',
-  columns: ['id', 'name'],
-  where: 'status = ?',
-  params: ['active'],
-  limit: 50
+// Select with filtering
+await callTool('select_data', {
+  table: 'orders',
+  columns: ['id', 'total', 'created_at'],
+  where: 'total > ?',
+  params: [1000],
+  limit: 50,
+  orderBy: 'created_at DESC'
 })
 ```
 
-## Architecture
+### Modify Data (with permissions)
+```javascript
+// Insert record
+await callTool('insert_record', {
+  table: 'products',
+  data: {
+    name: 'New Product',
+    price: 99.99,
+    stock: 100
+  }
+})
 
-- **Fault Tolerance**: Independent connections with auto-retry and health monitoring
-- **Database Factory**: Common interface for all database types
-- **Security**: Query validation, rate limiting, and audit logging
-
-## Development
-
-```bash
-# Add new database
-DB_TYPE_3=postgresql
-DB_HOST_3=localhost
-# Restart server - auto-discovered as db_3
-
-# Switch context
-switch_environment db_3
+// Update with condition
+await callTool('update_record', {
+  table: 'users',
+  data: { status: 'active' },
+  where: 'last_login < ?',
+  params: ['2024-01-01']
+})
 ```
 
-See [CLAUDE.md](CLAUDE.md) for detailed configuration examples.
+### Analysis
+```javascript
+// Join tables
+await callTool('join_tables', {
+  leftTable: 'orders',
+  rightTable: 'customers',
+  joinType: 'INNER',
+  leftKey: 'customer_id',
+  rightKey: 'id',
+  columns: ['orders.*', 'customers.name']
+})
+
+// Get statistics
+await callTool('get_column_statistics', {
+  table: 'sales',
+  column: 'amount'
+})
+```
+
+## 🔧 Development
+
+### Project Structure
+```
+db-mcp/
+├── src/
+│   ├── server-bun-sse.ts      # Main SSE server (Bun-compatible)
+│   ├── database/               # Database managers & factories
+│   ├── tools/                  # MCP tool handlers
+│   │   ├── schema.ts          # Schema tools
+│   │   ├── query.ts           # Query tools
+│   │   ├── modify.ts          # Modification tools
+│   │   ├── analysis.ts        # Analysis tools
+│   │   ├── tenant.ts          # Tenant management
+│   │   ├── utility.ts         # Utility tools
+│   │   └── configure.ts       # Configuration tool
+│   └── utils/                  # Utilities (logger, permissions)
+├── package.json
+└── tsconfig.json
+```
+
+### Adding New Tools
+
+1. Create tool handler in `src/tools/`:
+```typescript
+export const myToolSchema = z.object({
+  param1: z.string(),
+  param2: z.number().optional(),
+});
+
+export async function myTool(args: z.infer<typeof myToolSchema>) {
+  // Implement tool logic
+  return { result: 'success' };
+}
+```
+
+2. Register in `server-bun-sse.ts`:
+```typescript
+server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  if (request.params.name === 'my_tool') {
+    const result = await myTool(request.params.arguments);
+    return { content: [{ type: 'text', text: JSON.stringify(result) }] };
+  }
+});
+```
+
+## 🐛 Troubleshooting
+
+### Port Already in Use
+```bash
+# Check what's using the port
+lsof -i :3002
+
+# Kill the process
+kill -9 <PID>
+
+# Or use different port
+MCP_SERVER_PORT=3003 bun run dev
+```
+
+### Connection Issues
+```bash
+# Test SSE endpoint
+curl -N http://localhost:3002/sse
+
+# Check server logs
+bun run dev  # Watch for error messages
+```
+
+### Permission Issues
+- Check `ALLOW_DATA_MODIFICATION` in `.env`
+- Verify security settings (ALLOW_DROP, ALLOW_TRUNCATE)
+- Review permission logs in console output
+
+## 📚 Resources
+
+- [Model Context Protocol](https://modelcontextprotocol.io) - Official MCP documentation
+- [Bun Runtime](https://bun.sh) - Fast JavaScript runtime
+- [Project Repository](../README.md) - Main project documentation
+
+## 📄 License
+
+MIT License - See LICENSE file for details
+
+---
+
+**Built with Bun and Model Context Protocol**

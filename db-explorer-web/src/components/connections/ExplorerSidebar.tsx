@@ -26,9 +26,10 @@ type SidebarView = "database" | "recents";
 
 interface ExplorerSidebarProps {
   initialConnectionId?: string;
+  onNewChat?: () => void;
 }
 
-export function ExplorerSidebar({ initialConnectionId }: ExplorerSidebarProps) {
+export function ExplorerSidebar({ initialConnectionId, onNewChat }: ExplorerSidebarProps) {
   const {
     selectedSchema,
     selectedTables,
@@ -207,8 +208,14 @@ export function ExplorerSidebar({ initialConnectionId }: ExplorerSidebarProps) {
                   variant="ghost"
                   size="icon"
                   className="h-9 w-9"
-                  disabled
-                  title="Add new database (coming soon)"
+                  onClick={() => {
+                    if (onNewChat) {
+                      onNewChat();
+                      toast.success("New chat session started");
+                    }
+                  }}
+                  disabled={!onNewChat || !initialConnectionId}
+                  title="Start new chat"
                 >
                   <Plus className="w-4 h-4" />
                 </Button>

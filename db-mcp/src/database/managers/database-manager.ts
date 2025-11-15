@@ -18,7 +18,12 @@ export class DatabaseManager {
 
   async initialize(configs: Record<string, DatabaseConfig>): Promise<void> {
     if (Object.keys(configs).length === 0) {
-      throw new Error('No database configurations provided');
+      // Allow starting with no databases - they will be added dynamically
+      console.log('✓ Database manager initialized with no connections');
+      console.log('  Waiting for connections to be added via configure_connection tool');
+      this.currentDatabase = '';
+      this.startHealthChecks();
+      return;
     }
 
     // Initialize all connections (with fault tolerance)
@@ -150,18 +155,42 @@ export class DatabaseManager {
 
   getConnection(databaseId?: string): DatabaseConnection {
     const targetId = databaseId || this.currentDatabase;
+    
+    console.log('[DatabaseManager] getConnection called:', { 
+      requested: databaseId, 
+      current: this.currentDatabase, 
+      target: targetId,
+      available: Array.from(this.connections.keys())
+    });
 
     if (!targetId) {
-      throw new Error('No database ID specified and no current database set');
+      throw new Error(
+        'No database connection specified. ' +
+        'Please configure a connection first using the configure_connection tool or ensure a connection is set as current.'
+      );
     }
 
     const connection = this.connections.get(targetId);
     if (!connection) {
-      throw new Error(`Database connection not found: ${targetId}`);
+      console.error('[DatabaseManager] Connection not found:', targetId);
+      console.error('[DatabaseManager] Available connections:', Array.from(this.connections.keys()));
+      const available = Array.from(this.connections.keys());
+      throw new Error(
+        `Database connection "${targetId}" not found.\n` +
+        (available.length > 0 
+          ? `Available connections: ${available.join(', ')}`
+          : 'No connections are currently configured. Use configure_connection tool to add one.')
+      );
     }
 
     if (!connection.isConnected) {
-      throw new Error(`Database connection is not active: ${targetId}`);
+      const status = connection.getStatus();
+      throw new Error(
+        `Database "${targetId}" exists but is not connected.\n` +
+        `Connected: ${status.isConnected}\n` +
+        (status.lastError ? `Last error: ${status.lastError}\n` : '') +
+        'Try reconnecting or check your database credentials.'
+      );
     }
 
     return connection;
@@ -191,7 +220,9 @@ export class DatabaseManager {
   }
 
   getDatabaseList(): string[] {
-    return Array.from(this.connections.keys());
+    const list = Array.from(this.connections.keys());
+    console.log('[DatabaseManager] getDatabaseList:', list);
+    return list;
   }
 
   getConnectionStatus(databaseId?: string): ConnectionStatus[] {
@@ -329,6 +360,58 @@ export class DatabaseManager {
   async getTableSchema(table: string, database?: string, databaseId?: string): Promise<any[]> {
     const connection = this.getConnection(databaseId);
     return await connection.getTableSchema(table, database);
+  }
+
+  /**
+   * Add a new connection dynamically
+   */
+  async addConnection(id: string, config: DatabaseConfig): Promise<void> {
+    console.log('[DatabaseManager] addConnection called:', { id, type: config.type });
+    
+    if (this.connections.has(id)) {
+      console.log('[DatabaseManager] Connection already exists:', id);
+      throw new Error(`Connection ${id} already exists`);
+    }
+
+    await this.initializeConnection(id, config);
+    
+    console.log('[DatabaseManager] Connection added:', id);
+    console.log('[DatabaseManager] Total connections:', this.connections.size);
+    console.log('[DatabaseManager] Connection keys:', Array.from(this.connections.keys()));
+  }
+
+  /**
+   * Remove a connection dynamically
+   */
+  async removeConnection(id: string): Promise<void> {
+    const connection = this.connections.get(id);
+    if (!connection) {
+      throw new Error(`Connection ${id} not found`);
+    }
+
+    try {
+      await connection.disconnect();
+    } catch (error) {
+      console.error(`Error disconnecting ${id}:`, error);
+    }
+
+    this.connections.delete(id);
+
+    // If this was the current database, reset it
+    if (this.currentDatabase === id) {
+      const remainingIds = Array.from(this.connections.keys());
+      this.currentDatabase = remainingIds.length > 0 ? remainingIds[0]! : '';
+    }
+  }
+
+  /**
+   * Update an existing connection
+   */
+  async updateConnection(id: string, config: DatabaseConfig): Promise<void> {
+    // Remove old connection
+    await this.removeConnection(id);
+    // Add new connection with same ID
+    await this.addConnection(id, config);
   }
 
   async close(): Promise<void> {
