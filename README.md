@@ -5,6 +5,7 @@ A modern database exploration tool with natural language queries, real-time stre
 ## 🌟 Features
 
 - 🤖 **Natural Language Queries** - Ask questions in plain English
+- 🤖 **Multiple AI Providers** - Choose between Gemini (10x cheaper) or Claude
 - ⚡ **Real-Time Streaming** - See AI responses as they arrive
 - 🔒 **Smart Permissions** - Protection for sensitive operations  
 - 🎨 **Modern UI** - Clean, professional interface
@@ -70,9 +71,22 @@ FRONTEND_URL=http://localhost:3000
 
 ### Frontend (.env.local)
 ```bash
+# API Configuration
 NEXT_PUBLIC_API_URL=http://localhost:5000
 NEXT_PUBLIC_MCP_SERVER_URL=http://localhost:3002
-NEXT_PUBLIC_ANTHROPIC_API_KEY=your-anthropic-key  # For natural language queries
+
+# AI Provider (recommended: gemini)
+NEXT_PUBLIC_AI_PROVIDER=gemini  # or 'claude'
+
+# Google Gemini API Key
+# Get from: https://aistudio.google.com/app/apikey
+NEXT_PUBLIC_GEMINI_API_KEY=your-gemini-api-key
+
+# Anthropic Claude API Key (Optional)
+# Get from: https://console.anthropic.com/
+# NEXT_PUBLIC_ANTHROPIC_API_KEY=your-anthropic-key
+
+# Google OAuth
 NEXT_PUBLIC_GOOGLE_CLIENT_ID=your-google-client-id
 ```
 
@@ -132,10 +146,11 @@ MCP_SERVER_PORT=3003 bun run dev
 2. Check `NEXT_PUBLIC_MCP_SERVER_URL` in frontend `.env.local`
 3. Review browser console for errors
 
-**Anthropic API Errors:**
-1. Get API key from https://console.anthropic.com/
-2. Add credits to your account
-3. Set `NEXT_PUBLIC_ANTHROPIC_API_KEY` in frontend `.env.local`
+**AI API Errors:**
+1. **For Gemini**: Get API key from https://aistudio.google.com/app/apikey
+2. **For Claude**: Get API key from https://console.anthropic.com/
+3. Set the appropriate environment variable in frontend `.env.local`
+4. Restart your development server
 
 ## 📚 Documentation
 
@@ -154,11 +169,6 @@ MCP_SERVER_PORT=3003 bun run dev
 
 MIT License - See LICENSE file for details
 
-## 🙏 Acknowledgments
-
-- Built with [Model Context Protocol](https://modelcontextprotocol.io)
-- Powered by [Anthropic Claude](https://anthropic.com)
-- Inspired by modern AI chat interfaces
 
 ---
 

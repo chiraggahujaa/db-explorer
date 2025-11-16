@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { ConnectionWithRole } from "@/types/connection";
 import { useMCP } from "@/hooks/useMCP";
-import { getClaudeService, type ClaudeStreamEvent } from "@/services/ClaudeService";
+import { getAIService, type AIStreamEvent, getCurrentAIProvider } from "@/services/AIService";
 import {
   useStreamingMessages,
   usePendingPermissions,
@@ -18,6 +18,7 @@ import { useConnectionExplorer } from "@/contexts/ConnectionExplorerContext";
 import { cn } from "@/utils/ui";
 import { buildSystemPrompt } from "@/utils/chatPrompts";
 import { v4 as uuidv4 } from "uuid";
+import { toast } from "sonner";
 
 interface ChatInterfaceProps {
   connection: ConnectionWithRole;
@@ -45,11 +46,11 @@ export function ChatInterface({ connection }: ChatInterfaceProps) {
   const streamingMessages = useStreamingMessages(connection.id);
   const pendingPermissions = usePendingPermissions(connection.id);
 
-  // Clear Claude's conversation history when schema changes
+  // Clear AI conversation history when schema changes
   useEffect(() => {
     if (selectedSchema) {
-      const claudeService = getClaudeService();
-      claudeService.clearHistory();
+      const aiService = getAIService();
+      aiService.clearHistory();
       console.log('[ChatInterface] Schema changed to:', selectedSchema, '- Cleared conversation history');
     }
   }, [selectedSchema]);
@@ -73,12 +74,13 @@ export function ChatInterface({ connection }: ChatInterfaceProps) {
       const content = message.trim();
       setMessage("");
 
-      // Create a streaming message for Claude's response
+      // Create a streaming message for AI response
       const messageId = uuidv4();
+      const currentProvider = getCurrentAIProvider() || 'gemini';
       addStreamingMessage({
         messageId,
         connectionId: connection.id,
-        tool: 'claude_query',
+        tool: `${currentProvider}_query`,
         arguments: { query: content },
         timestamp: Date.now(),
         status: 'streaming',
@@ -86,8 +88,8 @@ export function ChatInterface({ connection }: ChatInterfaceProps) {
         fullText: '',
       });
 
-      // Get Claude service and send message
-      const claudeService = getClaudeService();
+      // Get AI service and send message
+      const aiService = getAIService();
       
       // Build system prompt with connection context
       const systemPrompt = buildSystemPrompt({
@@ -96,12 +98,12 @@ export function ChatInterface({ connection }: ChatInterfaceProps) {
         selectedTables,
       });
 
-      await claudeService.sendMessageWithSystem(
+      await aiService.sendMessageWithSystem(
         content,
         systemPrompt,
         connection.id,
         selectedSchema || null,
-        (event: ClaudeStreamEvent) => {
+        (event: AIStreamEvent) => {
           switch (event.type) {
             case 'text':
               if (event.content) {
@@ -110,13 +112,13 @@ export function ChatInterface({ connection }: ChatInterfaceProps) {
               break;
             
             case 'tool_use':
-              // Show which tool Claude is using
+              // Show which tool AI is using
               const toolMessage = `\n\n🔧 Using tool: **${event.toolName}**\n`;
               addChunk(messageId, toolMessage);
               break;
             
             case 'tool_result':
-              // Optionally show tool result (Claude will explain it)
+              // Optionally show tool result (AI will explain it)
               console.log('[ChatInterface] Tool executed:', event.toolName);
               break;
             
@@ -131,10 +133,20 @@ export function ChatInterface({ connection }: ChatInterfaceProps) {
         }
       );
     } catch (error: any) {
-      console.error("Failed to send message to Claude:", error);
+      console.error("Failed to send message to AI:", error);
       // Show error to user
       if (error.message?.includes('API key')) {
-        alert('Anthropic API key is missing or invalid. Please set NEXT_PUBLIC_ANTHROPIC_API_KEY in your .env.local file.');
+        const provider = getCurrentAIProvider() || 'AI';
+        const envVar = provider === 'gemini' ? 'NEXT_PUBLIC_GEMINI_API_KEY' : 'NEXT_PUBLIC_ANTHROPIC_API_KEY';
+        toast.error(`${provider.toUpperCase()} API Key Missing`, {
+          description: `Please set ${envVar} in your .env.local file.`,
+          duration: 5000,
+        });
+      } else {
+        toast.error('Failed to send message', {
+          description: error.message || 'An unexpected error occurred',
+          duration: 4000,
+        });
       }
     } finally {
       setIsSubmitting(false);
@@ -243,7 +255,7 @@ export function ChatInterface({ connection }: ChatInterfaceProps) {
                   <div className="flex justify-end mb-4">
                     <div className="max-w-[80%] bg-primary text-primary-foreground rounded-2xl rounded-tr-sm px-4 py-3 shadow-sm">
                       <p className="text-sm whitespace-pre-wrap break-words">
-                        {streamMsg.tool === 'claude_query' 
+                        {streamMsg.tool === 'claude_query' || streamMsg.tool === 'gemini_query'
                           ? streamMsg.arguments.query 
                           : streamMsg.tool === 'execute_custom_query'
                           ? streamMsg.arguments.sql
@@ -331,7 +343,7 @@ export function ChatInterface({ connection }: ChatInterfaceProps) {
           </form>
           
           <p className="text-xs text-center text-muted-foreground mt-2">
-            Powered by Claude AI with MCP tools • Ask in natural language or write SQL directly
+            Powered by {getCurrentAIProvider() === 'gemini' ? 'Gemini' : 'Claude'} AI with MCP tools • Ask in natural language or write SQL directly
           </p>
         </div>
       </div>

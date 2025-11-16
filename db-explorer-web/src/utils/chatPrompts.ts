@@ -52,8 +52,9 @@ You are already connected to this database server. The connection was configured
 When using MCP tools, the 'connection' parameter is automatically set to the current connection (${connection.id}). You should:
 ${
     selectedSchema
-      ? `- ALWAYS use database: "${selectedSchema}" parameter in your tool calls since it's already selected by the user`
-      : '- If you get "No database selected" error, FIRST call list_databases to see available databases, then call list_tables with a specific database name'
+      ? `- ALWAYS use database: "${selectedSchema}" parameter in your tool calls since it's already selected by the user
+- In SQL queries, use fully qualified table names: "${selectedSchema}.table_name" (e.g., ${selectedSchema}.users, ${selectedSchema}.orders)`
+      : '- If you get "No database selected" error, use fully qualified table names in SQL: database.table_name (e.g., coolsolutionstest.users)'
   }
 - For MySQL/PostgreSQL: Always specify the database name in queries (e.g., list_tables with database parameter)
 - Directly use tools like list_tables, describe_table, select_data, etc.
@@ -64,6 +65,16 @@ Available actions:
 - Explore schema and relationships
 - Analyze tables and statistics
 - Perform database operations
+
+IMPORTANT - PROACTIVE EXPLORATION:
+When a user asks about data, ALWAYS do your own research first:
+1. Use list_tables to discover available tables
+2. Use describe_table to understand table structures
+3. Explore relationships between tables before writing queries
+4. Don't assume table names - verify they exist first
+5. If unsure about schema, use list_databases to see what's available
+
+Be thorough in your exploration before attempting to answer. It's better to make multiple tool calls to understand the structure than to make assumptions.
 
 Always explain what you're doing and present results in a clear, user-friendly format.`;
 

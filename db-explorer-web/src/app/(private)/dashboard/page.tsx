@@ -9,6 +9,16 @@ import { ConnectionModal } from "@/components/connections/ConnectionModal";
 import { DeleteConnectionModal } from "@/components/connections/DeleteConnectionModal";
 import { InviteMemberModal } from "@/components/connections/InviteMemberModal";
 import { AcceptInvitationModal } from "@/components/connections/AcceptInvitationModal";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { connectionsAPI } from "@/lib/api/connections";
 import { toast } from "sonner";
 import type { ConnectionWithRole } from "@/types/connection";
@@ -19,6 +29,7 @@ export default function DashboardPage() {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [isAcceptModalOpen, setIsAcceptModalOpen] = useState(false);
+  const [isRemoveSharedOpen, setIsRemoveSharedOpen] = useState(false);
   const [selectedConnection, setSelectedConnection] =
     useState<ConnectionWithRole | null>(null);
   const queryClient = useQueryClient();
@@ -54,13 +65,16 @@ export default function DashboardPage() {
     setIsInviteModalOpen(true);
   };
 
-  const handleRemoveShared = async (connection: ConnectionWithRole) => {
-    if (!confirm(`Are you sure you want to remove "${connection.name}" from your shared connections?`)) {
-      return;
-    }
+  const handleRemoveShared = (connection: ConnectionWithRole) => {
+    setSelectedConnection(connection);
+    setIsRemoveSharedOpen(true);
+  };
+
+  const confirmRemoveShared = async () => {
+    if (!selectedConnection) return;
 
     try {
-      const result = await connectionsAPI.leaveSharedConnection(connection.id);
+      const result = await connectionsAPI.leaveSharedConnection(selectedConnection.id);
       if (result.success) {
         toast.success("Successfully removed from shared connections");
         handleSuccess();
@@ -70,6 +84,9 @@ export default function DashboardPage() {
     } catch (error: any) {
       console.error("Error removing shared connection:", error);
       toast.error(error.message || "Failed to remove shared connection");
+    } finally {
+      setIsRemoveSharedOpen(false);
+      setSelectedConnection(null);
     }
   };
 
@@ -213,6 +230,24 @@ export default function DashboardPage() {
         onOpenChange={setIsAcceptModalOpen}
         onSuccess={handleSuccess}
       />
+
+      <AlertDialog open={isRemoveSharedOpen} onOpenChange={setIsRemoveSharedOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove Shared Connection</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to remove &quot;{selectedConnection?.name}&quot; from your shared connections?
+              You will no longer have access to this connection unless you are invited again.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmRemoveShared} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
