@@ -159,13 +159,20 @@ export class GeminiService {
   private async executeToolsAndContinue(
     chat: any,
     toolCalls: Array<{ id: string; name: string; args: any }>,
-    onStream?: GeminiStreamCallback
+    onStream?: GeminiStreamCallback,
+    signal?: AbortSignal
   ): Promise<void> {
     const mcpService = getMCPService();
     const functionResponses: any[] = [];
 
     // Execute each tool
     for (const toolCall of toolCalls) {
+      // Check abort before each tool execution
+      if (signal?.aborted) {
+        console.log('[GeminiService] Request aborted during tool execution');
+        return;
+      }
+
       try {
         console.log('[GeminiService] 🔧 Tool Call:', toolCall.name);
         console.log('[GeminiService] 📥 Raw args from Gemini:', toolCall.args);
@@ -188,6 +195,12 @@ export class GeminiService {
           tool: toolCall.name,
           arguments: injectedInput,
         });
+
+        // Check abort after async operation
+        if (signal?.aborted) {
+          console.log('[GeminiService] Request aborted after tool execution');
+          return;
+        }
 
         // Extract text content from MCP result
         let resultText = '';
@@ -234,6 +247,12 @@ export class GeminiService {
       }
     }
 
+    // Check abort before continuing conversation
+    if (signal?.aborted) {
+      console.log('[GeminiService] Request aborted before continuing conversation');
+      return;
+    }
+
     // Add function calls to history
     this.conversationHistory.push({
       role: 'model',
@@ -254,7 +273,7 @@ export class GeminiService {
     });
 
     // Continue conversation with tool results
-    await this.continueConversation(chat, functionResponses, onStream);
+    await this.continueConversation(chat, functionResponses, onStream, signal);
   }
 
   /**
@@ -263,9 +282,16 @@ export class GeminiService {
   private async continueConversation(
     chat: any,
     functionResponses: any[],
-    onStream?: GeminiStreamCallback
+    onStream?: GeminiStreamCallback,
+    signal?: AbortSignal
   ): Promise<void> {
     try {
+      // Check abort before continuing
+      if (signal?.aborted) {
+        console.log('[GeminiService] Request aborted in continueConversation');
+        return;
+      }
+
       // Send all function responses back to Gemini
       const responseParts = functionResponses.map(fr => ({
         functionResponse: {
@@ -276,10 +302,22 @@ export class GeminiService {
 
       const result = await chat.sendMessageStream(responseParts);
 
+      // Check abort after async operation
+      if (signal?.aborted) {
+        console.log('[GeminiService] Request aborted after sending message stream');
+        return;
+      }
+
       let fullResponse = '';
       const newToolCalls: Array<{ id: string; name: string; args: any }> = [];
 
       for await (const chunk of result.stream) {
+        // Check abort in streaming loop
+        if (signal?.aborted) {
+          console.log('[GeminiService] Request aborted during continue streaming');
+          return;
+        }
+
         const chunkText = chunk.text();
 
         if (chunkText) {
@@ -309,9 +347,15 @@ export class GeminiService {
         }
       }
 
+      // Check abort before recursing
+      if (signal?.aborted) {
+        console.log('[GeminiService] Request aborted before recursive tool execution');
+        return;
+      }
+
       // If more tools were called, execute them
       if (newToolCalls.length > 0) {
-        await this.executeToolsAndContinue(chat, newToolCalls, onStream);
+        await this.executeToolsAndContinue(chat, newToolCalls, onStream, signal);
         return;
       }
 
@@ -321,9 +365,15 @@ export class GeminiService {
           parts: [{ text: fullResponse }],
         });
       }
-      
+
       onStream?.({ type: 'done' });
     } catch (error: any) {
+      // Don't throw error if aborted
+      if (signal?.aborted) {
+        console.log('[GeminiService] Request aborted in continueConversation');
+        return;
+      }
+
       console.error('[GeminiService] Error continuing conversation:', error);
       onStream?.({
         type: 'error',
@@ -509,16 +559,29 @@ export class GeminiService {
     systemPrompt: string,
     connectionId: string,
     selectedDatabase: string | null,
-    onStream?: GeminiStreamCallback
+    onStream?: GeminiStreamCallback,
+    signal?: AbortSignal
   ): Promise<void> {
     try {
+      // Check if already aborted
+      if (signal?.aborted) {
+        console.log('[GeminiService] Request aborted before starting');
+        return;
+      }
+
       // Store connection ID and selected database for this conversation
       this.connectionId = connectionId;
       this.selectedDatabase = selectedDatabase;
-      
+
       // Get MCP tools to provide to Gemini
       const mcpService = getMCPService();
       const mcpTools = await mcpService.listTools();
+
+      // Check abort after async operation
+      if (signal?.aborted) {
+        console.log('[GeminiService] Request aborted after listing tools');
+        return;
+      }
 
       // Convert MCP tools to Gemini function declaration format
       const geminiTools = this.convertMCPToolsToGeminiFormat(mcpTools);
@@ -549,13 +612,25 @@ export class GeminiService {
       // Send message with streaming
       const result = await chat.sendMessageStream(userMessage);
 
+      // Check abort after async operation
+      if (signal?.aborted) {
+        console.log('[GeminiService] Request aborted after sending message');
+        return;
+      }
+
       let fullResponse = '';
       const toolCalls: Array<{ id: string; name: string; args: any }> = [];
 
       // Process stream
       for await (const chunk of result.stream) {
+        // Check abort in streaming loop
+        if (signal?.aborted) {
+          console.log('[GeminiService] Request aborted during streaming');
+          return;
+        }
+
         const chunkText = chunk.text();
-        
+
         if (chunkText) {
           fullResponse += chunkText;
           onStream?.({ type: 'text', content: chunkText });
@@ -572,7 +647,7 @@ export class GeminiService {
               argsType: typeof fc.args,
               argsKeys: fc.args ? Object.keys(fc.args) : 'null/undefined'
             });
-            
+
             const toolCallId = `tool_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
             toolCalls.push({
@@ -591,12 +666,19 @@ export class GeminiService {
         }
       }
 
+      // Check abort before tool execution
+      if (signal?.aborted) {
+        console.log('[GeminiService] Request aborted before tool execution');
+        return;
+      }
+
       // If tools were called, execute them and continue
       if (toolCalls.length > 0) {
         await this.executeToolsAndContinue(
           chat,
           toolCalls,
-          onStream
+          onStream,
+          signal
         );
       } else {
         // Add assistant response to history
@@ -606,10 +688,16 @@ export class GeminiService {
             parts: [{ text: fullResponse }],
           });
         }
-        
+
         onStream?.({ type: 'done' });
       }
     } catch (error: any) {
+      // Don't throw error if aborted
+      if (signal?.aborted) {
+        console.log('[GeminiService] Request aborted');
+        return;
+      }
+
       console.error('[GeminiService] Error:', error);
       onStream?.({
         type: 'error',

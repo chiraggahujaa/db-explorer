@@ -171,16 +171,23 @@ export class ClaudeService {
    */
   private async executeToolsAndContinue(
     toolUses: Array<{ id: string; name: string; input: any }>,
-    onStream?: ClaudeStreamCallback
+    onStream?: ClaudeStreamCallback,
+    signal?: AbortSignal
   ): Promise<void> {
     const mcpService = getMCPService();
     const toolResults: Anthropic.ToolResultBlockParam[] = [];
 
     // Execute each tool
     for (const toolUse of toolUses) {
+      // Check abort before each tool execution
+      if (signal?.aborted) {
+        console.log('[ClaudeService] Request aborted during tool execution');
+        return;
+      }
+
       try {
         console.log('[ClaudeService] Executing tool:', toolUse.name, 'Original input:', toolUse.input);
-        
+
         onStream?.({
           type: 'tool_use',
           toolName: toolUse.name,
@@ -192,14 +199,20 @@ export class ClaudeService {
         if (!this.connectionId) {
           throw new Error('No connection ID set for MCP operations');
         }
-        
+
         const injectedInput = this.injectConnectionId(toolUse.input, this.connectionId);
         console.log('[ClaudeService] Injected connection:', this.connectionId, 'Final input:', injectedInput);
-        
+
         const result = await mcpService.executeQuery({
           tool: toolUse.name,
           arguments: injectedInput,
         });
+
+        // Check abort after async operation
+        if (signal?.aborted) {
+          console.log('[ClaudeService] Request aborted after tool execution');
+          return;
+        }
 
         // Extract text content from MCP result
         let resultText = '';
@@ -228,7 +241,7 @@ export class ClaudeService {
         });
       } catch (error: any) {
         console.error('[ClaudeService] Tool execution failed:', error);
-        
+
         // Report error to Claude
         toolResults.push({
           type: 'tool_result',
@@ -242,6 +255,12 @@ export class ClaudeService {
           error: `Tool ${toolUse.name} failed: ${error.message}`,
         });
       }
+    }
+
+    // Check abort before continuing conversation
+    if (signal?.aborted) {
+      console.log('[ClaudeService] Request aborted before continuing conversation');
+      return;
     }
 
     // Add assistant's tool use to history
@@ -262,16 +281,23 @@ export class ClaudeService {
     });
 
     // Continue conversation with tool results
-    await this.continueConversation(onStream);
+    await this.continueConversation(onStream, signal);
   }
 
   /**
    * Continue conversation after tool execution
    */
   private async continueConversation(
-    onStream?: ClaudeStreamCallback
+    onStream?: ClaudeStreamCallback,
+    signal?: AbortSignal
   ): Promise<void> {
     try {
+      // Check abort before continuing
+      if (signal?.aborted) {
+        console.log('[ClaudeService] Request aborted in continueConversation');
+        return;
+      }
+
       const stream = await this.client.messages.create({
         model: this.model,
         max_tokens: 4096,
@@ -279,12 +305,24 @@ export class ClaudeService {
         stream: true,
       });
 
+      // Check abort after async operation
+      if (signal?.aborted) {
+        console.log('[ClaudeService] Request aborted after creating stream');
+        return;
+      }
+
       let fullResponse = '';
 
       for await (const event of stream) {
+        // Check abort in streaming loop
+        if (signal?.aborted) {
+          console.log('[ClaudeService] Request aborted during continue streaming');
+          return;
+        }
+
         if (event.type === 'content_block_delta') {
           const delta = event.delta;
-          
+
           if (delta.type === 'text_delta') {
             fullResponse += delta.text;
             onStream?.({ type: 'text', content: delta.text });
@@ -296,11 +334,17 @@ export class ClaudeService {
               content: fullResponse,
             });
           }
-          
+
           onStream?.({ type: 'done' });
         }
       }
     } catch (error: any) {
+      // Don't throw error if aborted
+      if (signal?.aborted) {
+        console.log('[ClaudeService] Request aborted in continueConversation');
+        return;
+      }
+
       console.error('[ClaudeService] Error continuing conversation:', error);
       onStream?.({
         type: 'error',
@@ -364,13 +408,20 @@ export class ClaudeService {
     systemPrompt: string,
     connectionId: string,
     selectedDatabase: string | null,
-    onStream?: ClaudeStreamCallback
+    onStream?: ClaudeStreamCallback,
+    signal?: AbortSignal
   ): Promise<void> {
     try {
+      // Check if already aborted
+      if (signal?.aborted) {
+        console.log('[ClaudeService] Request aborted before starting');
+        return;
+      }
+
       // Store connection ID and selected database for this conversation
       this.connectionId = connectionId;
       this.selectedDatabase = selectedDatabase;
-      
+
       this.conversationHistory.push({
         role: 'user',
         content: userMessage,
@@ -378,6 +429,13 @@ export class ClaudeService {
 
       const mcpService = getMCPService();
       const mcpTools = await mcpService.listTools();
+
+      // Check abort after async operation
+      if (signal?.aborted) {
+        console.log('[ClaudeService] Request aborted after listing tools');
+        return;
+      }
+
       const anthropicTools = this.convertMCPToolsToAnthropicFormat(mcpTools);
 
       const stream = await this.client.messages.create({
@@ -389,15 +447,27 @@ export class ClaudeService {
         stream: true,
       });
 
+      // Check abort after async operation
+      if (signal?.aborted) {
+        console.log('[ClaudeService] Request aborted after creating stream');
+        return;
+      }
+
       let fullResponse = '';
       const toolUses: Array<{ id: string; name: string; input: any }> = [];
       const toolInputBuffers: Map<number, string> = new Map();
       const contentBlockToToolIndex: Map<number, number> = new Map();
 
       for await (const event of stream) {
+        // Check abort in streaming loop
+        if (signal?.aborted) {
+          console.log('[ClaudeService] Request aborted during streaming');
+          return;
+        }
+
         if (event.type === 'content_block_start') {
           const content = event.content_block;
-          
+
           if (content.type === 'tool_use') {
             const toolIndex = toolUses.length;
             toolUses.push({
@@ -410,7 +480,7 @@ export class ClaudeService {
           }
         } else if (event.type === 'content_block_delta') {
           const delta = event.delta;
-          
+
           if (delta.type === 'text_delta') {
             fullResponse += delta.text;
             onStream?.({ type: 'text', content: delta.text });
@@ -421,7 +491,7 @@ export class ClaudeService {
         } else if (event.type === 'content_block_stop') {
           const toolIndex = contentBlockToToolIndex.get(event.index);
           const buffer = toolInputBuffers.get(event.index);
-          
+
           if (toolIndex !== undefined && buffer && toolUses[toolIndex]) {
             try {
               toolUses[toolIndex].input = JSON.parse(buffer);
@@ -431,7 +501,12 @@ export class ClaudeService {
           }
         } else if (event.type === 'message_delta') {
           if (event.delta.stop_reason === 'tool_use') {
-            await this.executeToolsAndContinue(toolUses, onStream);
+            // Check abort before tool execution
+            if (signal?.aborted) {
+              console.log('[ClaudeService] Request aborted before tool execution');
+              return;
+            }
+            await this.executeToolsAndContinue(toolUses, onStream, signal);
             return;
           }
         } else if (event.type === 'message_stop') {
@@ -441,11 +516,17 @@ export class ClaudeService {
               content: fullResponse,
             });
           }
-          
+
           onStream?.({ type: 'done' });
         }
       }
     } catch (error: any) {
+      // Don't throw error if aborted
+      if (signal?.aborted) {
+        console.log('[ClaudeService] Request aborted');
+        return;
+      }
+
       console.error('[ClaudeService] Error:', error);
       onStream?.({
         type: 'error',

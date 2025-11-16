@@ -32,9 +32,10 @@ export interface IAIService {
     systemPrompt: string,
     connectionId: string,
     selectedDatabase: string | null,
-    onStream?: AIStreamCallback
+    onStream?: AIStreamCallback,
+    signal?: AbortSignal
   ): Promise<void>;
-  
+
   clearHistory(): void;
   getHistory(): any[];
 }
@@ -54,7 +55,8 @@ class ClaudeServiceAdapter implements IAIService {
     systemPrompt: string,
     connectionId: string,
     selectedDatabase: string | null,
-    onStream?: AIStreamCallback
+    onStream?: AIStreamCallback,
+    signal?: AbortSignal
   ): Promise<void> {
     await this.service.sendMessageWithSystem(
       userMessage,
@@ -64,7 +66,8 @@ class ClaudeServiceAdapter implements IAIService {
       (event: ClaudeStreamEvent) => {
         // Convert Claude events to unified format
         onStream?.(event as AIStreamEvent);
-      }
+      },
+      signal
     );
   }
 
@@ -92,7 +95,8 @@ class GeminiServiceAdapter implements IAIService {
     systemPrompt: string,
     connectionId: string,
     selectedDatabase: string | null,
-    onStream?: AIStreamCallback
+    onStream?: AIStreamCallback,
+    signal?: AbortSignal
   ): Promise<void> {
     await this.service.sendMessageWithSystem(
       userMessage,
@@ -102,7 +106,8 @@ class GeminiServiceAdapter implements IAIService {
       (event: GeminiStreamEvent) => {
         // Convert Gemini events to unified format
         onStream?.(event as AIStreamEvent);
-      }
+      },
+      signal
     );
   }
 

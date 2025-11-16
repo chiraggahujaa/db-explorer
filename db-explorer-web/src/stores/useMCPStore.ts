@@ -14,7 +14,7 @@ export interface MCPStreamingMessage {
   tool: string;
   arguments: Record<string, any>;
   timestamp: number;
-  status: 'streaming' | 'completed' | 'error';
+  status: 'streaming' | 'completed' | 'error' | 'cancelled';
   chunks: string[]; // Accumulated text chunks
   fullText: string; // Combined text
   result?: any; // Final result
@@ -51,6 +51,7 @@ interface MCPState {
   updateToolCallResult: (messageId: string, toolCallId: string, result: any) => void;
   completeStreaming: (messageId: string, result: any) => void;
   setStreamingError: (messageId: string, error: string) => void;
+  cancelStreaming: (messageId: string) => void;
   removeStreamingMessage: (messageId: string) => void;
   
   addPermissionRequest: (request: MCPPermissionRequest) => void;
@@ -149,6 +150,19 @@ export const useMCPStore = create<MCPState>()(
             ...message,
             status: 'error',
             error,
+          });
+          return { streamingMessages: newMessages };
+        }),
+
+      cancelStreaming: (messageId) =>
+        set((state) => {
+          const message = state.streamingMessages.get(messageId);
+          if (!message) return state;
+
+          const newMessages = new Map(state.streamingMessages);
+          newMessages.set(messageId, {
+            ...message,
+            status: 'cancelled',
           });
           return { streamingMessages: newMessages };
         }),
