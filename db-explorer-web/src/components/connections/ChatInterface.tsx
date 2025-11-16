@@ -19,6 +19,7 @@ import { cn } from "@/utils/ui";
 import { buildSystemPrompt } from "@/utils/chatPrompts";
 import { v4 as uuidv4 } from "uuid";
 import { toast } from "sonner";
+import { createToolCallData } from "@/utils/sqlExtractor";
 
 interface ChatInterfaceProps {
   connection: ConnectionWithRole;
@@ -68,7 +69,7 @@ export function ChatInterface({ connection }: ChatInterfaceProps) {
     }
 
     setIsSubmitting(true);
-    const { addStreamingMessage, addChunk, completeStreaming, setStreamingError } = useMCPStore.getState();
+    const { addStreamingMessage, addChunk, addToolCall, updateToolCallResult, completeStreaming, setStreamingError } = useMCPStore.getState();
     
     try {
       const content = message.trim();
@@ -86,6 +87,7 @@ export function ChatInterface({ connection }: ChatInterfaceProps) {
         status: 'streaming',
         chunks: [],
         fullText: '',
+        toolCalls: [],
       });
 
       // Get AI service and send message
@@ -110,22 +112,31 @@ export function ChatInterface({ connection }: ChatInterfaceProps) {
                 addChunk(messageId, event.content);
               }
               break;
-            
+
             case 'tool_use':
-              // Show which tool AI is using
-              const toolMessage = `\n\n🔧 Using tool: **${event.toolName}**\n`;
-              addChunk(messageId, toolMessage);
+              // Create tool call data and add to store
+              if (event.toolName && event.toolCallId) {
+                const toolCallData = createToolCallData(
+                  event.toolCallId,
+                  event.toolName,
+                  event.toolInput || {}
+                );
+                addToolCall(messageId, toolCallData);
+              }
               break;
-            
+
             case 'tool_result':
-              // Optionally show tool result (AI will explain it)
+              // Update tool call with result
+              if (event.toolCallId && event.toolResult) {
+                updateToolCallResult(messageId, event.toolCallId, event.toolResult);
+              }
               console.log('[ChatInterface] Tool executed:', event.toolName);
               break;
-            
+
             case 'done':
               completeStreaming(messageId, { success: true });
               break;
-            
+
             case 'error':
               setStreamingError(messageId, event.error || 'Unknown error');
               break;
@@ -156,9 +167,9 @@ export function ChatInterface({ connection }: ChatInterfaceProps) {
   const hasMessages = streamingMessages.length > 0 || pendingPermissions.length > 0;
 
   return (
-    <div className="flex flex-col h-full bg-gradient-to-b from-background to-muted/20">
+    <div className="flex flex-col h-full overflow-hidden bg-gradient-to-b from-background to-muted/20">
       {/* Header */}
-      <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-10">
+      <div className="flex-shrink-0 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container max-w-4xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -194,9 +205,9 @@ export function ChatInterface({ connection }: ChatInterfaceProps) {
         </div>
       </div>
 
-      {/* Chat Content Area */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="container max-w-4xl mx-auto px-4 py-6">
+      {/* Chat Content Area - Scrollable */}
+      <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0">
+        <div className="container max-w-4xl mx-auto px-2 py-6">
           {!hasMessages ? (
             // Welcome Screen
             <div className="flex flex-col items-center justify-center h-full min-h-[400px] text-center">
@@ -308,8 +319,8 @@ export function ChatInterface({ connection }: ChatInterfaceProps) {
       </div>
 
       {/* Chat Input */}
-      <div className="border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky bottom-0">
-        <div className="container max-w-4xl mx-auto px-4 py-4">
+      <div className="flex-shrink-0 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="container max-w-4xl mx-auto px-2 py-4">
           <form onSubmit={handleSubmit} className="flex gap-3">
             <div className="relative flex-1">
               <Input

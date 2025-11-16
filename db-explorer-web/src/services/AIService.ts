@@ -13,6 +13,7 @@ export interface AIStreamEvent {
   toolName?: string;
   toolInput?: any;
   toolResult?: any;
+  toolCallId?: string; // Unique ID for this tool call
   thinking?: string;
   error?: string;
 }

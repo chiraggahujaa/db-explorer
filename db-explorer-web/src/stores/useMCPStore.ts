@@ -6,6 +6,7 @@
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import { useMemo } from 'react';
+import type { ToolCallData } from '@/utils/sqlExtractor';
 
 export interface MCPStreamingMessage {
   messageId: string;
@@ -18,6 +19,7 @@ export interface MCPStreamingMessage {
   fullText: string; // Combined text
   result?: any; // Final result
   error?: string;
+  toolCalls: ToolCallData[]; // Array of tool calls made during this message
 }
 
 export interface MCPPermissionRequest {
@@ -45,6 +47,8 @@ interface MCPState {
   // Actions
   addStreamingMessage: (message: MCPStreamingMessage) => void;
   addChunk: (messageId: string, chunk: string) => void;
+  addToolCall: (messageId: string, toolCall: ToolCallData) => void;
+  updateToolCallResult: (messageId: string, toolCallId: string, result: any) => void;
   completeStreaming: (messageId: string, result: any) => void;
   setStreamingError: (messageId: string, error: string) => void;
   removeStreamingMessage: (messageId: string) => void;
@@ -85,6 +89,37 @@ export const useMCPStore = create<MCPState>()(
             ...message,
             chunks: [...message.chunks, chunk],
             fullText: message.fullText + chunk,
+          };
+          newMessages.set(messageId, updatedMessage);
+          return { streamingMessages: newMessages };
+        }),
+
+      addToolCall: (messageId, toolCall) =>
+        set((state) => {
+          const message = state.streamingMessages.get(messageId);
+          if (!message) return state;
+
+          const newMessages = new Map(state.streamingMessages);
+          const updatedMessage = {
+            ...message,
+            toolCalls: [...message.toolCalls, toolCall],
+          };
+          newMessages.set(messageId, updatedMessage);
+          return { streamingMessages: newMessages };
+        }),
+
+      updateToolCallResult: (messageId, toolCallId, result) =>
+        set((state) => {
+          const message = state.streamingMessages.get(messageId);
+          if (!message) return state;
+
+          const newMessages = new Map(state.streamingMessages);
+          const updatedToolCalls = message.toolCalls.map((tc) =>
+            tc.id === toolCallId ? { ...tc, result } : tc
+          );
+          const updatedMessage = {
+            ...message,
+            toolCalls: updatedToolCalls,
           };
           newMessages.set(messageId, updatedMessage);
           return { streamingMessages: newMessages };

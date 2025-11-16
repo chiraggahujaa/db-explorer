@@ -69,9 +69,9 @@ export default function ConnectionExplorerPage() {
 
   return (
     <ConnectionExplorerProvider key={chatSessionKey}>
-      <div className="flex h-[calc(100vh-4rem)] overflow-hidden">
+      <div className="flex h-full overflow-hidden">
         {/* Left Sidebar */}
-        <ExplorerSidebar 
+        <ExplorerSidebar
           initialConnectionId={connectionId}
           onNewChat={handleNewChat}
         />

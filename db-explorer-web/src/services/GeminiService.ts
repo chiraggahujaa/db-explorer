@@ -17,6 +17,7 @@ export interface GeminiStreamEvent {
   toolName?: string;
   toolInput?: any;
   toolResult?: any;
+  toolCallId?: string; // Unique ID for this tool call
   thinking?: string;
   error?: string;
 }
@@ -83,7 +84,7 @@ export class GeminiService {
       const result = await chat.sendMessageStream(userMessage);
 
       let fullResponse = '';
-      const toolCalls: Array<{ name: string; args: any }> = [];
+      const toolCalls: Array<{ id: string; name: string; args: any }> = [];
 
       // Process stream
       for await (const chunk of result.stream) {
@@ -106,7 +107,10 @@ export class GeminiService {
               argsKeys: fc.args ? Object.keys(fc.args) : 'null/undefined'
             });
             
+            const toolCallId = `tool_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
             toolCalls.push({
+              id: toolCallId,
               name: fc.name,
               args: fc.args,
             });
@@ -115,6 +119,7 @@ export class GeminiService {
               type: 'tool_use',
               toolName: fc.name,
               toolInput: fc.args,
+              toolCallId,
             });
           }
         }
@@ -153,7 +158,7 @@ export class GeminiService {
    */
   private async executeToolsAndContinue(
     chat: any,
-    toolCalls: Array<{ name: string; args: any }>,
+    toolCalls: Array<{ id: string; name: string; args: any }>,
     onStream?: GeminiStreamCallback
   ): Promise<void> {
     const mcpService = getMCPService();
@@ -170,21 +175,15 @@ export class GeminiService {
           table_name: toolCall.args?.table_name,
           allKeys: Object.keys(toolCall.args || {}),
         });
-        
-        onStream?.({
-          type: 'tool_use',
-          toolName: toolCall.name,
-          toolInput: toolCall.args,
-        });
 
         // Execute via MCP - inject connection ID automatically
         if (!this.connectionId) {
           throw new Error('No connection ID set for MCP operations');
         }
-        
+
         const injectedInput = this.injectConnectionId(toolCall.args, this.connectionId);
         console.log('[GeminiService] ✅ Final args to MCP:', injectedInput);
-        
+
         const result = await mcpService.executeQuery({
           tool: toolCall.name,
           arguments: injectedInput,
@@ -214,10 +213,11 @@ export class GeminiService {
           type: 'tool_result',
           toolName: toolCall.name,
           toolResult: resultText,
+          toolCallId: toolCall.id,
         });
       } catch (error: any) {
         console.error('[GeminiService] Tool execution failed:', error);
-        
+
         // Report error to Gemini
         functionResponses.push({
           name: toolCall.name,
@@ -277,11 +277,11 @@ export class GeminiService {
       const result = await chat.sendMessageStream(responseParts);
 
       let fullResponse = '';
-      const newToolCalls: Array<{ name: string; args: any }> = [];
+      const newToolCalls: Array<{ id: string; name: string; args: any }> = [];
 
       for await (const chunk of result.stream) {
         const chunkText = chunk.text();
-        
+
         if (chunkText) {
           fullResponse += chunkText;
           onStream?.({ type: 'text', content: chunkText });
@@ -291,7 +291,10 @@ export class GeminiService {
         const functionCalls = chunk.functionCalls();
         if (functionCalls && functionCalls.length > 0) {
           for (const fc of functionCalls) {
+            const toolCallId = `tool_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
             newToolCalls.push({
+              id: toolCallId,
               name: fc.name,
               args: fc.args,
             });
@@ -300,6 +303,7 @@ export class GeminiService {
               type: 'tool_use',
               toolName: fc.name,
               toolInput: fc.args,
+              toolCallId,
             });
           }
         }
@@ -546,7 +550,7 @@ export class GeminiService {
       const result = await chat.sendMessageStream(userMessage);
 
       let fullResponse = '';
-      const toolCalls: Array<{ name: string; args: any }> = [];
+      const toolCalls: Array<{ id: string; name: string; args: any }> = [];
 
       // Process stream
       for await (const chunk of result.stream) {
@@ -569,7 +573,10 @@ export class GeminiService {
               argsKeys: fc.args ? Object.keys(fc.args) : 'null/undefined'
             });
             
+            const toolCallId = `tool_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
             toolCalls.push({
+              id: toolCallId,
               name: fc.name,
               args: fc.args,
             });
@@ -578,6 +585,7 @@ export class GeminiService {
               type: 'tool_use',
               toolName: fc.name,
               toolInput: fc.args,
+              toolCallId,
             });
           }
         }

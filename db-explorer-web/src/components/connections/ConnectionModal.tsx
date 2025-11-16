@@ -158,7 +158,7 @@ export function ConnectionModal({
           onSuccess();
           onOpenChange(false);
         } else {
-          toast.error(result.error || "Failed to update connection");
+          toast.error("Failed to update connection");
         }
       } else {
         // Create new connection
@@ -174,7 +174,7 @@ export function ConnectionModal({
           onSuccess();
           onOpenChange(false);
         } else {
-          toast.error(result.error || "Failed to create connection");
+          toast.error("Failed to create connection");
         }
       }
     } catch (error: any) {

@@ -147,6 +147,7 @@ export const useMCP = (options: UseMCPOptions) => {
         status: 'streaming',
         chunks: [],
         fullText: '',
+        toolCalls: [],
       });
 
       try {

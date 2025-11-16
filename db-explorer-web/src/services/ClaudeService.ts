@@ -17,6 +17,7 @@ export interface ClaudeStreamEvent {
   toolName?: string;
   toolInput?: any;
   toolResult?: any;
+  toolCallId?: string; // Unique ID for this tool call
   thinking?: string;
   error?: string;
 }
@@ -96,8 +97,9 @@ export class ClaudeService {
               type: 'tool_use',
               toolName: content.name,
               toolInput: content.input,
+              toolCallId: content.id,
             });
-            
+
             // Store tool use placeholder - input will be accumulated from deltas
             const toolIndex = toolUses.length;
             toolUses.push({
@@ -183,6 +185,7 @@ export class ClaudeService {
           type: 'tool_use',
           toolName: toolUse.name,
           toolInput: toolUse.input,
+          toolCallId: toolUse.id,
         });
 
         // Execute via MCP - inject connection ID automatically
@@ -221,6 +224,7 @@ export class ClaudeService {
           type: 'tool_result',
           toolName: toolUse.name,
           toolResult: resultText,
+          toolCallId: toolUse.id,
         });
       } catch (error: any) {
         console.error('[ClaudeService] Tool execution failed:', error);
