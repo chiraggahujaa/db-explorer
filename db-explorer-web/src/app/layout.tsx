@@ -26,9 +26,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
+    // TODO: Find better solution - overflow-hidden prevents body scroll when chat tool calls expand
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased h-full overflow-hidden`}
       >
         <QueryProvider>
           <RootAuthGuard>
