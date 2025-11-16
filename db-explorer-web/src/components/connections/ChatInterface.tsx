@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, FormEvent, useEffect, useRef } from "react";
-import { Send, Sparkles, Database, Loader2 } from "lucide-react";
+import { Send, Sparkles, Database, Loader2, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { ConnectionWithRole } from "@/types/connection";
@@ -29,6 +29,8 @@ export function ChatInterface({ connection }: ChatInterfaceProps) {
   const [message, setMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const currentMessageIdRef = useRef<string | null>(null);
 
   // Get sidebar selection context
   const { selectedSchema, selectedTables } = useConnectionExplorer();
@@ -61,22 +63,44 @@ export function ChatInterface({ connection }: ChatInterfaceProps) {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [streamingMessages, pendingPermissions]);
 
+  const handleStop = () => {
+    if (abortControllerRef.current && currentMessageIdRef.current) {
+      console.log('[ChatInterface] Stopping chat request');
+      abortControllerRef.current.abort();
+
+      // Mark the message as cancelled in the store
+      const { cancelStreaming } = useMCPStore.getState();
+      cancelStreaming(currentMessageIdRef.current);
+
+      // Clean up
+      abortControllerRef.current = null;
+      currentMessageIdRef.current = null;
+      setIsSubmitting(false);
+    }
+  };
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    
+
     if (!message.trim() || isSubmitting || !isMCPConnected) {
       return;
     }
 
     setIsSubmitting(true);
     const { addStreamingMessage, addChunk, addToolCall, updateToolCallResult, completeStreaming, setStreamingError } = useMCPStore.getState();
-    
+
+    // Create new AbortController for this request
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+
     try {
       const content = message.trim();
       setMessage("");
 
       // Create a streaming message for AI response
       const messageId = uuidv4();
+      currentMessageIdRef.current = messageId;
+
       const currentProvider = getCurrentAIProvider() || 'gemini';
       addStreamingMessage({
         messageId,
@@ -92,7 +116,7 @@ export function ChatInterface({ connection }: ChatInterfaceProps) {
 
       // Get AI service and send message
       const aiService = getAIService();
-      
+
       // Build system prompt with connection context
       const systemPrompt = buildSystemPrompt({
         connection,
@@ -141,9 +165,16 @@ export function ChatInterface({ connection }: ChatInterfaceProps) {
               setStreamingError(messageId, event.error || 'Unknown error');
               break;
           }
-        }
+        },
+        abortController.signal
       );
     } catch (error: any) {
+      // Don't show error if request was aborted
+      if (error.name === 'AbortError' || abortController.signal.aborted) {
+        console.log('[ChatInterface] Request was cancelled by user');
+        return;
+      }
+
       console.error("Failed to send message to AI:", error);
       // Show error to user
       if (error.message?.includes('API key')) {
@@ -160,6 +191,9 @@ export function ChatInterface({ connection }: ChatInterfaceProps) {
         });
       }
     } finally {
+      // Clean up
+      abortControllerRef.current = null;
+      currentMessageIdRef.current = null;
       setIsSubmitting(false);
     }
   };
@@ -342,15 +376,27 @@ export function ChatInterface({ connection }: ChatInterfaceProps) {
                 </div>
               )}
             </div>
-            <Button
-              type="submit"
-              size="lg"
-              disabled={!message.trim() || isSubmitting || !isMCPConnected || isMCPConnecting}
-              className="rounded-full w-12 h-12 p-0"
-            >
-              <Send className="w-5 h-5" />
-              <span className="sr-only">Send message</span>
-            </Button>
+            {isSubmitting ? (
+              <Button
+                type="button"
+                size="lg"
+                onClick={handleStop}
+                className="rounded-full w-12 h-12 p-0 bg-red-500 hover:bg-red-600 text-white"
+              >
+                <Square className="w-5 h-5" />
+                <span className="sr-only">Stop</span>
+              </Button>
+            ) : (
+              <Button
+                type="submit"
+                size="lg"
+                disabled={!message.trim() || isSubmitting || !isMCPConnected || isMCPConnecting}
+                className="rounded-full w-12 h-12 p-0"
+              >
+                <Send className="w-5 h-5" />
+                <span className="sr-only">Send message</span>
+              </Button>
+            )}
           </form>
           
           <p className="text-xs text-center text-muted-foreground mt-2">
