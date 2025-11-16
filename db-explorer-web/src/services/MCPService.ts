@@ -138,23 +138,6 @@ export class MCPService {
           if (content.type === 'text') {
             const text = content.text || '';
 
-            // Check if this is a permission request
-            if (text.includes('permission') || text.includes('allow')) {
-              const permissionData: MCPPermissionRequest = {
-                permissionType: 'query_execution',
-                message: text,
-                action: query.tool,
-              };
-
-              onStream?.({
-                type: 'permission_request',
-                data: permissionData,
-              });
-
-              // Return early - waiting for user permission response
-              return { type: 'permission_pending', data: permissionData };
-            }
-
             // Stream text chunks (simulate character-by-character streaming)
             // In a real implementation, the MCP server would send chunks via SSE
             const chunks = this.splitIntoChunks(text, 50); // Split into ~50 char chunks

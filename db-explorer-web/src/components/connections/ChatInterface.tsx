@@ -255,7 +255,7 @@ export function ChatInterface({ connection }: ChatInterfaceProps) {
                   <div className="flex justify-end mb-4">
                     <div className="max-w-[80%] bg-primary text-primary-foreground rounded-2xl rounded-tr-sm px-4 py-3 shadow-sm">
                       <p className="text-sm whitespace-pre-wrap break-words">
-                        {streamMsg.tool === 'claude_query' 
+                        {streamMsg.tool === 'claude_query' || streamMsg.tool === 'gemini_query'
                           ? streamMsg.arguments.query 
                           : streamMsg.tool === 'execute_custom_query'
                           ? streamMsg.arguments.sql
