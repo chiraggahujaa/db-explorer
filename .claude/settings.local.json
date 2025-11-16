@@ -6,7 +6,13 @@
       "Bash(timeout 5 npm run dev:*)",
       "Bash(npm run build:*)",
       "Bash(curl:*)",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "Bash(npm install:*)",
+      "Bash(ls:*)",
+      "Bash(git config:*)",
+      "Bash(npm run type-check:*)",
+      "Bash(cat:*)",
+      "Bash(find:*)"
     ],
     "deny": [],
     "ask": []

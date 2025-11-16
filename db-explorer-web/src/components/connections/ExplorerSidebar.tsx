@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Database,
@@ -12,6 +12,7 @@ import {
   Table as TableIcon,
   Loader2,
   Check,
+  GripVertical,
 } from "lucide-react";
 import { databaseExplorerAPI, type Table, type Schema } from "@/lib/api/connections";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
@@ -29,6 +30,10 @@ interface ExplorerSidebarProps {
   onNewChat?: () => void;
 }
 
+const MIN_SIDEBAR_WIDTH = 240;
+const MAX_SIDEBAR_WIDTH = 600;
+const DEFAULT_SIDEBAR_WIDTH = 320;
+
 export function ExplorerSidebar({ initialConnectionId, onNewChat }: ExplorerSidebarProps) {
   const {
     selectedSchema,
@@ -36,12 +41,17 @@ export function ExplorerSidebar({ initialConnectionId, onNewChat }: ExplorerSide
     setSelectedSchema,
     toggleTable,
   } = useConnectionExplorer();
-  
+
   const [activeView, setActiveView] = useState<SidebarView>("database");
   const [isDatabaseSidebarOpen, setIsDatabaseSidebarOpen] = useState(true);
   const [tableFilter, setTableFilter] = useState("");
   const [loadedTables, setLoadedTables] = useState<Table[]>([]);
   const [isLoadingTables, setIsLoadingTables] = useState(false);
+
+  // Resize functionality
+  const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
+  const [isResizing, setIsResizing] = useState(false);
+  const sidebarRef = useRef<HTMLDivElement>(null);
 
   // Fetch schemas for the connection
   const { data: schemasData, isLoading: isLoadingSchemas, refetch: refetchSchemas } = useQuery({
@@ -103,6 +113,41 @@ export function ExplorerSidebar({ initialConnectionId, onNewChat }: ExplorerSide
     toast.success("Schemas refreshed");
   };
 
+  // Resize handlers
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+  }, []);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing) return;
+
+      const newWidth = e.clientX;
+      if (newWidth >= MIN_SIDEBAR_WIDTH && newWidth <= MAX_SIDEBAR_WIDTH) {
+        setSidebarWidth(newWidth);
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+
+    if (isResizing) {
+      document.addEventListener("mousemove", handleMouseMove);
+      document.addEventListener("mouseup", handleMouseUp);
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+    }
+
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+  }, [isResizing]);
+
   const handleSchemaChange = useCallback((schemaName: string) => {
     // Use setTimeout to ensure Select portal closes before state updates
     setTimeout(() => {
@@ -143,7 +188,11 @@ export function ExplorerSidebar({ initialConnectionId, onNewChat }: ExplorerSide
   };
 
   return (
-    <div className="flex h-full bg-background border-r">
+    <div
+      ref={sidebarRef}
+      className="flex h-full bg-background border-r relative"
+      style={{ width: isDatabaseSidebarOpen ? `${sidebarWidth}px` : "auto" }}
+    >
       {/* Left Icon Bar */}
       <div className="flex flex-col items-center gap-2 p-2 border-r bg-muted/30">
         <button
@@ -172,7 +221,7 @@ export function ExplorerSidebar({ initialConnectionId, onNewChat }: ExplorerSide
 
       {/* Main Sidebar Content */}
       {activeView === "database" && isDatabaseSidebarOpen && (
-        <div className="flex-1 flex flex-col w-80 overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-hidden">
           {/* Top Section: Schema Selector */}
           <div className="p-3 border-b space-y-2">
             <div className="flex items-center gap-2">
@@ -301,7 +350,7 @@ export function ExplorerSidebar({ initialConnectionId, onNewChat }: ExplorerSide
 
       {/* Recents Sidebar */}
       {activeView === "recents" && (
-        <div className="flex-1 flex flex-col w-80 overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-hidden">
           <div className="p-4 border-b">
             <h3 className="text-sm font-semibold">Recent Chats</h3>
           </div>
@@ -311,6 +360,23 @@ export function ExplorerSidebar({ initialConnectionId, onNewChat }: ExplorerSide
               <p>No recent chats</p>
               <p className="text-xs mt-1">Chat history will appear here</p>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Resize Handle */}
+      {isDatabaseSidebarOpen && (
+        <div
+          onMouseDown={handleMouseDown}
+          className={cn(
+            "absolute top-0 right-0 w-1 h-full cursor-col-resize group hover:bg-primary/20 transition-colors flex items-center justify-center",
+            isResizing && "bg-primary/30"
+          )}
+          title="Drag to resize"
+        >
+          <div className="absolute top-0 right-0 w-1 h-full bg-transparent group-hover:bg-primary/50 transition-colors" />
+          <div className="relative z-10 bg-background/80 rounded-sm p-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+            <GripVertical className="w-3 h-3 text-muted-foreground" />
           </div>
         </div>
       )}
