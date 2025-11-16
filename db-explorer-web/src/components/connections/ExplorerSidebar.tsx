@@ -43,7 +43,6 @@ export function ExplorerSidebar({ initialConnectionId, onNewChat }: ExplorerSide
   } = useConnectionExplorer();
 
   const [activeView, setActiveView] = useState<SidebarView>("database");
-  const [isDatabaseSidebarOpen, setIsDatabaseSidebarOpen] = useState(true);
   const [tableFilter, setTableFilter] = useState("");
   const [loadedTables, setLoadedTables] = useState<Table[]>([]);
   const [isLoadingTables, setIsLoadingTables] = useState(false);
@@ -175,28 +174,24 @@ export function ExplorerSidebar({ initialConnectionId, onNewChat }: ExplorerSide
     );
   }, [loadedTables, tableFilter]);
 
-  const toggleDatabaseSidebar = () => {
-    setIsDatabaseSidebarOpen((prev) => !prev);
-    if (!isDatabaseSidebarOpen) {
-      setActiveView("database");
-    }
+  const handleDatabaseClick = () => {
+    setActiveView("database");
   };
 
   const handleRecentsClick = () => {
     setActiveView("recents");
-    setIsDatabaseSidebarOpen(false);
   };
 
   return (
     <div
       ref={sidebarRef}
       className="flex h-full bg-background border-r relative"
-      style={{ width: isDatabaseSidebarOpen ? `${sidebarWidth}px` : "auto" }}
+      style={{ width: `${sidebarWidth}px` }}
     >
-      {/* Left Icon Bar */}
+      {/* Left Icon Bar - Tabs */}
       <div className="flex flex-col items-center gap-2 p-2 border-r bg-muted/30">
         <button
-          onClick={toggleDatabaseSidebar}
+          onClick={handleDatabaseClick}
           className={cn(
             "p-2 rounded-md transition-colors",
             "hover:bg-accent",
@@ -219,8 +214,8 @@ export function ExplorerSidebar({ initialConnectionId, onNewChat }: ExplorerSide
         </button>
       </div>
 
-      {/* Main Sidebar Content */}
-      {activeView === "database" && isDatabaseSidebarOpen && (
+      {/* Main Sidebar Content - Database Tab */}
+      {activeView === "database" && (
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Top Section: Schema Selector */}
           <div className="p-3 border-b space-y-2">
@@ -348,7 +343,7 @@ export function ExplorerSidebar({ initialConnectionId, onNewChat }: ExplorerSide
         </div>
       )}
 
-      {/* Recents Sidebar */}
+      {/* Main Sidebar Content - Recents Tab */}
       {activeView === "recents" && (
         <div className="flex-1 flex flex-col overflow-hidden">
           <div className="p-4 border-b">
@@ -364,22 +359,20 @@ export function ExplorerSidebar({ initialConnectionId, onNewChat }: ExplorerSide
         </div>
       )}
 
-      {/* Resize Handle */}
-      {isDatabaseSidebarOpen && (
-        <div
-          onMouseDown={handleMouseDown}
-          className={cn(
-            "absolute top-0 right-0 w-1 h-full cursor-col-resize group hover:bg-primary/20 transition-colors flex items-center justify-center",
-            isResizing && "bg-primary/30"
-          )}
-          title="Drag to resize"
-        >
-          <div className="absolute top-0 right-0 w-1 h-full bg-transparent group-hover:bg-primary/50 transition-colors" />
-          <div className="relative z-10 bg-background/80 rounded-sm p-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-            <GripVertical className="w-3 h-3 text-muted-foreground" />
-          </div>
+      {/* Resize Handle - Works for all tabs */}
+      <div
+        onMouseDown={handleMouseDown}
+        className={cn(
+          "absolute top-0 right-0 w-1 h-full cursor-col-resize group hover:bg-primary/20 transition-colors flex items-center justify-center",
+          isResizing && "bg-primary/30"
+        )}
+        title="Drag to resize"
+      >
+        <div className="absolute top-0 right-0 w-1 h-full bg-transparent group-hover:bg-primary/50 transition-colors" />
+        <div className="relative z-10 bg-background/80 rounded-sm p-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+          <GripVertical className="w-3 h-3 text-muted-foreground" />
         </div>
-      )}
+      </div>
     </div>
   );
 }
