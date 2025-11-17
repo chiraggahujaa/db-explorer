@@ -63,6 +63,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@google/generative-ai": "^0.21.0",
     "@supabase/supabase-js": "^2.56.1",
     "@types/better-sqlite3": "^7.6.13",
     "@types/multer": "^2.0.0",

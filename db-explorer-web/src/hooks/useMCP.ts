@@ -38,11 +38,24 @@ export const useMCP = (options: UseMCPOptions) => {
   // Initialize MCP connection
   useEffect(() => {
     if (!autoConnect || !connection) return;
-    
-    // If already initialized for this connection, just update state
-    if (currentConnectionIdRef.current === connection.id && initializeCompletedRef.current) {
-      setIsConnected(mcpService.isClientConnected());
+
+    // Check current connection state
+    const actuallyConnected = mcpService.isClientConnected();
+    const sameConnection = currentConnectionIdRef.current === connection.id;
+
+    // If we're already initialized AND actually connected for this same connection, we're good
+    if (sameConnection && initializeCompletedRef.current && actuallyConnected) {
+      console.log(`[useMCP] Already connected to ${connection.id}`);
+      setIsConnected(true);
+      setIsConnecting(false);
       return;
+    }
+
+    // If we thought we were initialized but we're not actually connected, reset and reconnect
+    if (sameConnection && initializeCompletedRef.current && !actuallyConnected) {
+      console.log(`[useMCP] Detected disconnection for ${connection.id}, will reconnect`);
+      initializeCompletedRef.current = false;
+      currentConnectionIdRef.current = null;
     }
 
     const initialize = async () => {
@@ -85,6 +98,8 @@ export const useMCP = (options: UseMCPOptions) => {
         const timeoutPromise = new Promise((_, reject) => {
           setTimeout(() => reject(new Error('MCP initialization timeout')), 10000);
         });
+
+        console.log('mcp promise race',connection.id, mcpConfig);
         
         await Promise.race([
           mcpService.initialize(connection.id, mcpConfig),
