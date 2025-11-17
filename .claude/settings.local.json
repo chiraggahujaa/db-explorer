@@ -12,7 +12,18 @@
       "Bash(git config:*)",
       "Bash(npm run type-check:*)",
       "Bash(cat:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(git log:*)",
+      "Bash(git diff:*)",
+      "Bash(npm run dev)",
+      "Bash(git show:*)",
+      "Bash(lsof:*)",
+      "Bash(git merge-base:*)",
+      "Bash(git stash:*)",
+      "Bash(/tmp/all_staged.patch)",
+      "Bash(/tmp/all_unstaged.patch)",
+      "Bash(git add:*)",
+      "Bash(test:*)"
     ],
     "deny": [],
     "ask": []

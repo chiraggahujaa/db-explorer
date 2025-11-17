@@ -7,6 +7,7 @@ import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import { useMemo } from 'react';
 import type { ToolCallData } from '@/utils/sqlExtractor';
+import { chatSessionsAPI, type ChatSession, type ChatMessage } from '@/lib/api/chatSessions';
 
 export interface MCPStreamingMessage {
   messageId: string;
@@ -37,13 +38,18 @@ export interface MCPPermissionRequest {
 interface MCPState {
   // Streaming messages
   streamingMessages: Map<string, MCPStreamingMessage>;
-  
+
   // Permission requests
   pendingPermissions: Map<string, MCPPermissionRequest>;
-  
+
   // Permission cache (Always Allow)
   permissionCache: Map<string, boolean>; // key: "operation:resource"
-  
+
+  // Chat session state
+  currentChatSessionId: string | null;
+  currentChatSession: ChatSession | null;
+  chatHistory: ChatMessage[];
+
   // Actions
   addStreamingMessage: (message: MCPStreamingMessage) => void;
   addChunk: (messageId: string, chunk: string) => void;
@@ -53,15 +59,23 @@ interface MCPState {
   setStreamingError: (messageId: string, error: string) => void;
   cancelStreaming: (messageId: string) => void;
   removeStreamingMessage: (messageId: string) => void;
-  
+
   addPermissionRequest: (request: MCPPermissionRequest) => void;
   removePermissionRequest: (messageId: string) => void;
-  
+
   cachePermission: (operation: string, resource: string) => void;
   checkPermissionCache: (operation: string, resource: string) => boolean;
   clearPermissionCache: () => void;
-  
+
   clearMCPState: (connectionId?: string) => void;
+
+  // Chat session actions
+  createNewChat: (connectionId: string, schema?: string, tables?: string[]) => Promise<ChatSession | null>;
+  loadChatHistory: (chatSessionId: string) => Promise<void>;
+  saveChatMessages: (userMessage: string, assistantMessage: string, toolCalls?: any) => Promise<void>;
+  updateChatTitle: (title: string) => Promise<void>;
+  generateChatTitle: (userMessage: string) => Promise<void>;
+  clearCurrentChat: () => void;
 }
 
 export const useMCPStore = create<MCPState>()(
@@ -71,6 +85,9 @@ export const useMCPStore = create<MCPState>()(
       streamingMessages: new Map(),
       pendingPermissions: new Map(),
       permissionCache: new Map(),
+      currentChatSessionId: null,
+      currentChatSession: null,
+      chatHistory: [],
 
       // Actions
       addStreamingMessage: (message) =>
@@ -249,6 +266,150 @@ export const useMCPStore = create<MCPState>()(
             pendingPermissions: newPermissions,
           };
         }),
+
+      // Chat session methods
+      createNewChat: async (connectionId, schema, tables) => {
+        try {
+          const response = await chatSessionsAPI.createChatSession({
+            connectionId,
+            selectedSchema: schema,
+            selectedTables: tables,
+          });
+
+          if (response.success && response.data) {
+            set({
+              currentChatSessionId: response.data.id,
+              currentChatSession: response.data,
+              chatHistory: [],
+            });
+            return response.data;
+          }
+          return null;
+        } catch (error) {
+          console.error('Failed to create new chat:', error);
+          return null;
+        }
+      },
+
+      loadChatHistory: async (chatSessionId) => {
+        try {
+          const response = await chatSessionsAPI.getChatSession(chatSessionId);
+
+          if (response.success && response.data) {
+            set({
+              currentChatSessionId: chatSessionId,
+              currentChatSession: response.data,
+              chatHistory: response.data.chatMessages || [],
+            });
+          } else {
+            // If loading fails, clear the chat state
+            console.error('Failed to load chat history');
+            set({
+              currentChatSessionId: null,
+              currentChatSession: null,
+              chatHistory: [],
+            });
+          }
+        } catch (error) {
+          console.error('Failed to load chat history:', error);
+          // Clear chat state on error
+          set({
+            currentChatSessionId: null,
+            currentChatSession: null,
+            chatHistory: [],
+          });
+        }
+      },
+
+      saveChatMessages: async (userMessage, assistantMessage, toolCalls) => {
+        const { currentChatSessionId } = get();
+
+        if (!currentChatSessionId) {
+          console.warn('No active chat session to save messages to');
+          return;
+        }
+
+        try {
+          // Save user message
+          await chatSessionsAPI.addMessage(currentChatSessionId, {
+            role: 'user',
+            content: userMessage,
+          });
+
+          // Save assistant message with tool calls
+          await chatSessionsAPI.addMessage(currentChatSessionId, {
+            role: 'assistant',
+            content: assistantMessage,
+            toolCalls: toolCalls,
+          });
+
+          // Don't append to chatHistory - for new chats, we show streaming messages
+          // For resumed chats, messages are already in chatHistory from initial load
+          // This prevents duplicate display of messages
+        } catch (error) {
+          console.error('Failed to save chat messages:', error);
+        }
+      },
+
+      updateChatTitle: async (title) => {
+        const { currentChatSessionId, currentChatSession } = get();
+
+        if (!currentChatSessionId) {
+          console.warn('No active chat session to update');
+          return;
+        }
+
+        try {
+          const response = await chatSessionsAPI.updateChatSession(currentChatSessionId, {
+            title,
+          });
+
+          if (response.success && response.data) {
+            set({
+              currentChatSession: response.data,
+            });
+          }
+        } catch (error) {
+          console.error('Failed to update chat title:', error);
+        }
+      },
+
+      generateChatTitle: async (userMessage) => {
+        const { currentChatSessionId } = get();
+
+        if (!currentChatSessionId) {
+          console.warn('[useMCPStore] No active chat session to generate title for');
+          return;
+        }
+
+        try {
+          console.log('[useMCPStore] Requesting title generation for session:', currentChatSessionId);
+          const response = await chatSessionsAPI.generateTitle(currentChatSessionId);
+
+          if (response.success && response.data) {
+            console.log('[useMCPStore] Title generated successfully:', response.data.title);
+            // Update the local state with the new title
+            const session = get().currentChatSession;
+            if (session) {
+              set({
+                currentChatSession: { ...session, title: response.data.title },
+              });
+            }
+          } else {
+            console.warn('[useMCPStore] Title generation failed:', response);
+          }
+        } catch (error) {
+          console.error('[useMCPStore] Failed to generate chat title:', error);
+        }
+      },
+
+      clearCurrentChat: () => {
+        set({
+          currentChatSessionId: null,
+          currentChatSession: null,
+          chatHistory: [],
+        });
+      },
     }),
     { name: 'mcp-store' }
   )
