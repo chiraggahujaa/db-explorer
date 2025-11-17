@@ -24,6 +24,7 @@ export class PostgreSQLConnection extends BaseDatabaseConnection {
         max: 10,
         idleTimeoutMillis: 30000,
         connectionTimeoutMillis: 10000,
+        ssl: this.config.ssl ? { rejectUnauthorized: true } : false,
       });
 
       // Test the connection
@@ -177,13 +178,8 @@ export class PostgreSQLConnection extends BaseDatabaseConnection {
     const port = this.config.port || DEFAULT_PORT;
     const database = this.config.database || 'postgres';
 
-    let connectionString = `postgresql://${user}:${password}@${host}:${port}/${database}`;
-
-    if (this.config.ssl) {
-      connectionString += '?sslmode=require';
-    }
-
-    return connectionString;
+    // Note: SSL is handled via Pool config, not connection string
+    return `postgresql://${user}:${password}@${host}:${port}/${database}`;
   }
 
   private mapPostgreSQLType(column: any): string {

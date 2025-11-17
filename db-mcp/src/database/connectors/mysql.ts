@@ -23,7 +23,7 @@ export class MySQLConnection extends BaseDatabaseConnection {
         maxIdle: CONNECTION_DEFAULTS.maxIdle,
         enableKeepAlive: CONNECTION_DEFAULTS.enableKeepAlive,
         keepAliveInitialDelay: CONNECTION_DEFAULTS.keepAliveInitialDelay,
-        ssl: this.config.ssl ? {} : undefined,
+        ssl: this.config.ssl ? { rejectUnauthorized: true } : undefined,
         charset: CONNECTION_DEFAULTS.charset,
         timezone: CONNECTION_DEFAULTS.timezone,
         debug: CONNECTION_DEFAULTS.debug,
