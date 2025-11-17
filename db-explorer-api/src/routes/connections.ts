@@ -2,10 +2,12 @@
 
 import express from 'express';
 import { ConnectionController } from '../controllers/ConnectionController.js';
+import { ChatSessionController } from '../controllers/ChatSessionController.js';
 import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
 const connectionController = new ConnectionController();
+const chatSessionController = new ChatSessionController();
 
 // All routes require authentication
 router.use(authenticateToken);
@@ -44,5 +46,8 @@ router.post(
 // Database explorer routes
 router.get('/:id/schemas', connectionController.getSchemas.bind(connectionController));
 router.get('/:id/tables', connectionController.getTables.bind(connectionController));
+
+// Chat sessions for a connection
+router.get('/:connectionId/chat-sessions', chatSessionController.getChatSessionsByConnection.bind(chatSessionController));
 
 export default router;

@@ -4,6 +4,7 @@ import { Loader2, CheckCircle2, XCircle, Ban } from "lucide-react";
 import { cn } from "@/utils/ui";
 import type { MCPStreamingMessage } from "@/stores/useMCPStore";
 import { ToolCallsList } from "./ToolCallsList";
+import { MessageMarkdown } from "./MessageMarkdown";
 
 interface StreamingMessageProps {
   message: MCPStreamingMessage;
@@ -53,13 +54,13 @@ export function StreamingMessage({ message, className }: StreamingMessageProps) 
       {/* AI Response Text */}
       {cleanText && (
         <div className={cn(
-          "text-sm whitespace-pre-wrap mb-3",
+          "mb-3",
           isStreaming && "text-blue-900 dark:text-blue-200",
           isCompleted && "text-gray-700 dark:text-gray-300",
           isError && "text-red-900 dark:text-red-200",
           isCancelled && "text-yellow-900 dark:text-yellow-200"
         )}>
-          {cleanText}
+          <MessageMarkdown content={cleanText} />
         </div>
       )}
 
