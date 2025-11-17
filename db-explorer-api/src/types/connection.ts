@@ -6,6 +6,8 @@ export type ConnectionRole = 'owner' | 'admin' | 'developer' | 'tester' | 'viewe
 
 export type InvitationStatus = 'pending' | 'accepted' | 'declined' | 'expired';
 
+export type SchemaTrainingStatus = 'pending' | 'training' | 'completed' | 'failed';
+
 // Base configuration interface
 export interface BaseConnectionConfig {
   type: DatabaseType;
@@ -147,4 +149,77 @@ export interface InvitationWithDetails extends ConnectionInvitation {
     email: string;
     full_name?: string;
   };
+}
+
+// Schema cache types
+
+export interface ColumnMetadata {
+  name: string;
+  type: string;
+  nullable: boolean;
+  default_value?: string;
+  is_primary_key?: boolean;
+  is_foreign_key?: boolean;
+  extra?: string;
+}
+
+export interface IndexMetadata {
+  name: string;
+  column_name: string;
+  is_unique: boolean;
+  index_type?: string;
+}
+
+export interface ForeignKeyMetadata {
+  column_name: string;
+  referenced_table: string;
+  referenced_column: string;
+  constraint_name: string;
+  update_rule?: string;
+  delete_rule?: string;
+}
+
+export interface TableMetadata {
+  name: string;
+  schema: string;
+  columns: ColumnMetadata[];
+  indexes: IndexMetadata[];
+  foreign_keys: ForeignKeyMetadata[];
+  row_count?: number;
+}
+
+export interface SchemaMetadata {
+  name: string;
+  tables: TableMetadata[];
+}
+
+export interface CachedSchemaData {
+  schemas: SchemaMetadata[];
+  total_tables: number;
+  total_columns: number;
+  database_type: DatabaseType;
+  version?: string;
+}
+
+export interface ConnectionSchemaCache {
+  id: string;
+  connection_id: string;
+  schema_data: CachedSchemaData;
+  training_status: SchemaTrainingStatus;
+  training_started_at?: string;
+  last_trained_at?: string;
+  error_message?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TrainSchemaRequest {
+  force?: boolean; // Force re-training even if recently trained
+}
+
+export interface TrainSchemaResponse {
+  success: boolean;
+  status: SchemaTrainingStatus;
+  message: string;
+  cache?: ConnectionSchemaCache;
 }

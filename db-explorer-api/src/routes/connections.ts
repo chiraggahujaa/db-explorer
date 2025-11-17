@@ -2,10 +2,12 @@
 
 import express from 'express';
 import { ConnectionController } from '../controllers/ConnectionController.js';
+import { SchemaTrainingController } from '../controllers/SchemaTrainingController.js';
 import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
 const connectionController = new ConnectionController();
+const schemaTrainingController = new SchemaTrainingController();
 
 // All routes require authentication
 router.use(authenticateToken);
@@ -44,5 +46,10 @@ router.post(
 // Database explorer routes
 router.get('/:id/schemas', connectionController.getSchemas.bind(connectionController));
 router.get('/:id/tables', connectionController.getTables.bind(connectionController));
+
+// Schema training routes
+router.post('/:id/train-schema', schemaTrainingController.trainSchema.bind(schemaTrainingController));
+router.get('/:id/schema-cache', schemaTrainingController.getSchemaCache.bind(schemaTrainingController));
+router.delete('/:id/schema-cache', schemaTrainingController.deleteSchemaCache.bind(schemaTrainingController));
 
 export default router;

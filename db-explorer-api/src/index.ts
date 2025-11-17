@@ -26,6 +26,9 @@ import {
   validateContentType,
 } from './middleware/security.js';
 
+// Import services
+import { schemaTrainingScheduler } from './services/SchemaTrainingScheduler.js';
+
 const environment = process.env.NODE_ENV || 'development';
 console.log(`Loading environment: ${environment}`);
 dotenv.config({ path: `.env.${environment}` });
@@ -111,11 +114,19 @@ const server = app.listen(PORT, () => {
   console.log(`📊 Environment: ${env}`);
   console.log(`🌐 Health check: ${baseUrl}/health`);
   console.log(`📖 API Base URL: ${baseUrl}/api`);
+
+  // Start schema training scheduler
+  // Default: Every Sunday at 2:00 AM
+  // Can be overridden with SCHEMA_TRAINING_CRON env variable
+  const cronExpression = process.env.SCHEMA_TRAINING_CRON || '0 2 * * 0';
+  schemaTrainingScheduler.start(cronExpression);
+  console.log(`📅 Schema training scheduler started (cron: ${cronExpression})`);
 });
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
   console.log('SIGTERM received, shutting down gracefully...');
+  schemaTrainingScheduler.stop();
   server.close(() => {
     console.log('HTTP server closed');
     process.exit(0);
@@ -124,6 +135,7 @@ process.on('SIGTERM', () => {
 
 process.on('SIGINT', () => {
   console.log('SIGINT received, shutting down gracefully...');
+  schemaTrainingScheduler.stop();
   server.close(() => {
     console.log('HTTP server closed');
     process.exit(0);

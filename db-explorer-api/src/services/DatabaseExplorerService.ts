@@ -215,6 +215,37 @@ export class DatabaseExplorerService {
   }
 
   /**
+   * Execute a query on a connection
+   */
+  async executeQuery(
+    connectionId: string,
+    query: string,
+    userId: string
+  ): Promise<any[]> {
+    let dbConnection: any = null;
+
+    try {
+      const { dbConnection: conn } = await this.getDatabaseConnection(
+        connectionId,
+        userId,
+        true
+      );
+      dbConnection = conn;
+
+      const result = await dbConnection.query(query);
+      return result.results || result || [];
+    } finally {
+      if (dbConnection) {
+        try {
+          await dbConnection.disconnect();
+        } catch (disconnectError) {
+          console.error('Error disconnecting database:', disconnectError);
+        }
+      }
+    }
+  }
+
+  /**
    * Convert ConnectionConfig to DatabaseConfig format
    */
   private convertToDatabaseConfig(config: ConnectionConfig, dbType: string, includeDatabase: boolean = true): DatabaseConfig {
