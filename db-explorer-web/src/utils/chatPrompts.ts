@@ -1,9 +1,43 @@
 import type { ConnectionWithRole } from "@/types/connection";
+import type { DataAccessConfig } from "@/stores/useDataAccessStore";
 
 interface BuildSystemPromptParams {
   connection: ConnectionWithRole;
   selectedSchema?: string | null;
   selectedTables?: Set<string>;
+  dataAccessConfig?: DataAccessConfig;
+}
+
+/**
+ * Builds data access restrictions text for the system prompt
+ */
+function buildDataAccessRestrictions(config: DataAccessConfig): string {
+  const restrictions: string[] = [];
+
+  if (config.readOnly) {
+    restrictions.push("- **READ-ONLY MODE ENABLED**: You can ONLY execute SELECT queries. Any INSERT, UPDATE, DELETE, DROP, CREATE, ALTER, or other write operations are STRICTLY FORBIDDEN. If the user asks to modify data, explain that read-only mode is enabled and they need to disable it in the data access settings.");
+  }
+
+  if (config.privacyMode) {
+    restrictions.push("- **PRIVACY MODE ENABLED**: You can ONLY access schema metadata (table names, column names, data types, relationships) using tools like list_tables, describe_table, list_databases. You CANNOT read actual data values. When the user asks for data, you should:\n  1. Use describe_table to understand the structure\n  2. Generate the appropriate SQL query\n  3. Inform the user that the query will be executed via API to fetch the data\n  4. DO NOT use select_data or any tool that returns actual data values\n  This protects sensitive data from being exposed to the AI.");
+  }
+
+  if (config.rowLimit && config.rowLimit !== 100) {
+    restrictions.push(`- **ROW LIMIT**: All queries must be limited to a maximum of ${config.rowLimit} rows. Always add LIMIT ${config.rowLimit} to your SELECT queries unless the user specifically requests fewer rows.`);
+  } else if (!config.rowLimit || config.rowLimit === 100) {
+    restrictions.push(`- **ROW LIMIT**: All queries must be limited to a maximum of 100 rows by default. Always add LIMIT 100 to your SELECT queries unless the user specifically requests a different limit.`);
+  }
+
+  if (restrictions.length === 0) {
+    return "";
+  }
+
+  return `\n\nIMPORTANT - DATA ACCESS RESTRICTIONS:
+The user has configured the following data access restrictions. You MUST comply with these restrictions:
+
+${restrictions.join("\n\n")}
+
+If you violate these restrictions, the operation will fail. Always inform the user when a restriction prevents you from completing their request.`;
 }
 
 /**
@@ -13,6 +47,7 @@ export function buildSystemPrompt({
   connection,
   selectedSchema,
   selectedTables,
+  dataAccessConfig,
 }: BuildSystemPromptParams): string {
   // Get database info based on connection type
   const dbInfo =
@@ -36,12 +71,17 @@ ALWAYS use the database parameter with the value "${selectedSchema}" when callin
 Example: list_tables with database: "${selectedSchema}"`
     : "";
 
+  // Build data access restrictions
+  const restrictionsInfo = dataAccessConfig
+    ? buildDataAccessRestrictions(dataAccessConfig)
+    : "";
+
   const systemPrompt = `You are an AI assistant helping users interact with their database: "${connection.name}".
 
 Connection details:
 - Type: ${connection.config.type}
 - Database: ${dbInfo}
-- Connection ID: ${connection.id}${contextInfo}
+- Connection ID: ${connection.id}${contextInfo}${restrictionsInfo}
 
 IMPORTANT CONNECTION CONTEXT:
 You are already connected to this database server. The connection was configured automatically when this session started. You do NOT need to:

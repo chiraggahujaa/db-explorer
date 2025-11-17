@@ -14,12 +14,14 @@ import {
 import { useMCPStore } from "@/stores/useMCPStore";
 import { StreamingMessage } from "./StreamingMessage";
 import { PermissionDialog } from "./PermissionDialog";
+import { DataAccessConfig } from "./DataAccessConfig";
 import { useConnectionExplorer } from "@/contexts/ConnectionExplorerContext";
 import { cn } from "@/utils/ui";
 import { buildSystemPrompt } from "@/utils/chatPrompts";
 import { v4 as uuidv4 } from "uuid";
 import { toast } from "sonner";
 import { createToolCallData } from "@/utils/sqlExtractor";
+import { useDataAccessStore } from "@/stores/useDataAccessStore";
 
 interface ChatInterfaceProps {
   connection: ConnectionWithRole;
@@ -34,6 +36,10 @@ export function ChatInterface({ connection }: ChatInterfaceProps) {
 
   // Get sidebar selection context
   const { selectedSchema, selectedTables } = useConnectionExplorer();
+
+  // Get data access configuration
+  const { getConfig } = useDataAccessStore();
+  const dataAccessConfig = getConfig(connection.id);
 
   // MCP integration
   const {
@@ -122,6 +128,7 @@ export function ChatInterface({ connection }: ChatInterfaceProps) {
         connection,
         selectedSchema: selectedSchema || undefined,
         selectedTables,
+        dataAccessConfig,
       });
 
       await aiService.sendMessageWithSystem(
@@ -356,6 +363,7 @@ export function ChatInterface({ connection }: ChatInterfaceProps) {
       <div className="flex-shrink-0 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container max-w-4xl mx-auto px-2 py-4">
           <form onSubmit={handleSubmit} className="flex gap-3">
+            <DataAccessConfig connectionId={connection.id} />
             <div className="relative flex-1">
               <Input
                 value={message}
