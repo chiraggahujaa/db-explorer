@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, FormEvent, useEffect, useRef } from "react";
-import { Send, Sparkles, Database, Loader2, Square } from "lucide-react";
+import { Send, Sparkles, Database, Loader2, Square, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { ConnectionWithRole } from "@/types/connection";
@@ -14,12 +14,14 @@ import {
 import { useMCPStore } from "@/stores/useMCPStore";
 import { StreamingMessage } from "./StreamingMessage";
 import { PermissionDialog } from "./PermissionDialog";
+import { RetrainSchemaModal } from "./RetrainSchemaModal";
 import { useConnectionExplorer } from "@/contexts/ConnectionExplorerContext";
 import { cn } from "@/utils/ui";
 import { buildSystemPrompt } from "@/utils/chatPrompts";
 import { v4 as uuidv4 } from "uuid";
 import { toast } from "sonner";
 import { createToolCallData } from "@/utils/sqlExtractor";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface ChatInterfaceProps {
   connection: ConnectionWithRole;
@@ -28,9 +30,11 @@ interface ChatInterfaceProps {
 export function ChatInterface({ connection }: ChatInterfaceProps) {
   const [message, setMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isRetrainModalOpen, setIsRetrainModalOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const currentMessageIdRef = useRef<string | null>(null);
+  const queryClient = useQueryClient();
 
   // Get sidebar selection context
   const { selectedSchema, selectedTables } = useConnectionExplorer();
@@ -218,6 +222,17 @@ export function ChatInterface({ connection }: ChatInterfaceProps) {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsRetrainModalOpen(true)}
+                disabled={!isMCPConnected}
+                title="Re-train schema cache for AI understanding"
+                className="gap-2"
+              >
+                <RefreshCw className="w-4 h-4" />
+                <span className="hidden sm:inline">Re-train Schema</span>
+              </Button>
               {isMCPConnecting ? (
                 <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-yellow-100 dark:bg-yellow-900/30">
                   <Loader2 className="w-3 h-3 text-yellow-600 animate-spin" />
@@ -404,6 +419,17 @@ export function ChatInterface({ connection }: ChatInterfaceProps) {
           </p>
         </div>
       </div>
+
+      {/* Retrain Schema Modal */}
+      <RetrainSchemaModal
+        open={isRetrainModalOpen}
+        onOpenChange={setIsRetrainModalOpen}
+        connection={connection}
+        onSuccess={() => {
+          // Invalidate schema cache query
+          queryClient.invalidateQueries({ queryKey: ["connection", connection.id] });
+        }}
+      />
     </div>
   );
 }
