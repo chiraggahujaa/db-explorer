@@ -381,8 +381,8 @@ export function ChatInterface({ connection, chatSessionId }: ChatInterfaceProps)
       <div ref={scrollContainerRef} className="flex-1 overflow-y-auto overflow-x-hidden min-h-0">
         {!hasMessages ? (
           // Welcome Screen - centered in full available height
-          <div className="h-full flex flex-col items-center justify-center">
-            <div className="container max-w-4xl mx-auto px-2 py-6 text-center">
+          <div className="h-full flex items-center justify-center px-4">
+            <div className="w-full max-w-2xl mx-auto text-center">
               <div className="mb-6">
                 <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 dark:from-blue-600 dark:to-purple-700 mb-4 shadow-lg">
                   <Sparkles className="w-8 h-8 text-white" />
@@ -391,13 +391,13 @@ export function ChatInterface({ connection, chatSessionId }: ChatInterfaceProps)
               <h2 className="text-3xl font-bold mb-3 bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-400 dark:to-purple-400 bg-clip-text text-transparent">
                 Ask me anything about your database
               </h2>
-              <p className="text-muted-foreground max-w-md mb-8">
+              <p className="text-muted-foreground mx-auto max-w-md mb-8">
                 I can help you explore schemas, query data, analyze tables, and more.
                 Just ask in natural language or write SQL directly.
               </p>
 
               {/* Example Prompts */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-2xl">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full">
                 <button
                   onClick={() => setMessage("Show me all tables in this database")}
                   className="p-4 text-left rounded-lg border bg-card hover:bg-accent transition-colors"
