@@ -193,13 +193,27 @@ export interface SchemaCacheResponse {
   error?: string;
 }
 
+export interface SchemaTrainingOptions {
+  schemas?: string[];
+  tables?: Array<{ schema: string; table: string }>;
+  includeColumns?: boolean;
+  includeTypes?: boolean;
+  includeConstraints?: boolean;
+  includeIndexes?: boolean;
+  includeForeignKeys?: boolean;
+}
+
 export const schemaTrainingAPI = {
   // Train schema for a connection
   trainSchema: async (
     connectionId: string,
-    force: boolean = false
+    force: boolean = false,
+    options?: SchemaTrainingOptions
   ): Promise<TrainSchemaResponse> => {
-    const res = await api.post(`/api/connections/${connectionId}/train-schema`, { force });
+    const res = await api.post(`/api/connections/${connectionId}/train-schema`, {
+      force,
+      options,
+    });
     return res.data;
   },
 

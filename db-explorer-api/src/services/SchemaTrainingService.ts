@@ -14,12 +14,23 @@ import {
 import { DataMapper } from '../utils/mappers.js';
 
 export class SchemaTrainingService {
+  private static instance: SchemaTrainingService;
   private connectionService: ConnectionService;
   private explorerService: DatabaseExplorerService;
 
   constructor() {
     this.connectionService = new ConnectionService();
     this.explorerService = new DatabaseExplorerService();
+  }
+
+  /**
+   * Get singleton instance
+   */
+  public static getInstance(): SchemaTrainingService {
+    if (!SchemaTrainingService.instance) {
+      SchemaTrainingService.instance = new SchemaTrainingService();
+    }
+    return SchemaTrainingService.instance;
   }
 
   /**
@@ -73,6 +84,243 @@ export class SchemaTrainingService {
       );
       throw error;
     }
+  }
+
+  /**
+   * Train schema with granular options
+   * Allows selective training of schemas, tables, and metadata types
+   */
+  async trainSchemaWithOptions(
+    connectionId: string,
+    userId: string,
+    force: boolean = false,
+    options?: {
+      schemas?: string[];
+      tables?: Array<{ schema: string; table: string }>;
+      includeColumns?: boolean;
+      includeTypes?: boolean;
+      includeConstraints?: boolean;
+      includeIndexes?: boolean;
+      includeForeignKeys?: boolean;
+    },
+    progressCallback?: (progress: number) => Promise<void>
+  ): Promise<{ schemaData: CachedSchemaData; cache: ConnectionSchemaCache }> {
+    // Check if user has access to this connection
+    const connection = await this.connectionService.getConnectionById(connectionId, userId);
+    if (!connection) {
+      throw new Error('Connection not found or access denied');
+    }
+
+    // Check if training is already in progress
+    const existingCache = await this.getSchemaCache(connectionId);
+    if (existingCache && existingCache.training_status === 'training' && !force) {
+      throw new Error('Schema training is already in progress');
+    }
+
+    // Update status to training
+    await this.updateTrainingStatus(connectionId, 'training', new Date().toISOString());
+    await progressCallback?.(10);
+
+    try {
+      // Fetch schema metadata with options
+      const schemaData = await this.fetchSchemaMetadataWithOptions(
+        connectionId,
+        userId,
+        options,
+        progressCallback
+      );
+
+      await progressCallback?.(90);
+
+      // Store in cache
+      const cache = await this.saveSchemaCache(connectionId, schemaData, 'completed');
+
+      await progressCallback?.(100);
+
+      return { schemaData, cache };
+    } catch (error) {
+      // Update status to failed with error message
+      await this.updateTrainingStatus(
+        connectionId,
+        'failed',
+        undefined,
+        error instanceof Error ? error.message : 'Unknown error occurred'
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Fetch schema metadata with granular options
+   */
+  private async fetchSchemaMetadataWithOptions(
+    connectionId: string,
+    userId: string,
+    options?: {
+      schemas?: string[];
+      tables?: Array<{ schema: string; table: string }>;
+      includeColumns?: boolean;
+      includeTypes?: boolean;
+      includeConstraints?: boolean;
+      includeIndexes?: boolean;
+      includeForeignKeys?: boolean;
+    },
+    progressCallback?: (progress: number) => Promise<void>
+  ): Promise<CachedSchemaData> {
+    // Get connection config
+    const connectionResponse = await this.connectionService.getConnectionByIdInternal(connectionId, userId);
+    if (!connectionResponse.success || !connectionResponse.data) {
+      throw new Error('Connection not found');
+    }
+    const connection = connectionResponse.data;
+
+    // Default: include everything if not specified
+    const includeColumns = options?.includeColumns ?? true;
+    const includeIndexes = options?.includeIndexes ?? true;
+    const includeForeignKeys = options?.includeForeignKeys ?? true;
+
+    const schemas: SchemaMetadata[] = [];
+    let totalTables = 0;
+    let totalColumns = 0;
+
+    // Get all schemas/databases
+    const schemasResponse = await this.explorerService.getSchemas(connectionId, userId);
+    if (!schemasResponse.success || !schemasResponse.data) {
+      throw new Error(schemasResponse.error || 'Failed to fetch schemas');
+    }
+    let schemaList = schemasResponse.data.map(s => s.name);
+
+    // Filter by selected schemas if specified
+    if (options?.schemas && options.schemas.length > 0) {
+      schemaList = schemaList.filter(s => options.schemas!.includes(s));
+    }
+
+    const totalSchemas = schemaList.length;
+    let processedSchemas = 0;
+
+    // For each schema, get tables and their metadata
+    for (const schemaName of schemaList) {
+      const tables: TableMetadata[] = [];
+
+      // Get tables in this schema
+      const tablesResponse = await this.explorerService.getTables(connectionId, userId, schemaName);
+      if (!tablesResponse.success || !tablesResponse.data) {
+        processedSchemas++;
+        continue;
+      }
+      let tableList = tablesResponse.data.map(t => t.name);
+
+      // Filter by selected tables if specified
+      if (options?.tables && options.tables.length > 0) {
+        const selectedTablesInSchema = options.tables
+          .filter(t => t.schema === schemaName)
+          .map(t => t.table);
+        if (selectedTablesInSchema.length > 0) {
+          tableList = tableList.filter(t => selectedTablesInSchema.includes(t));
+        }
+      }
+
+      const totalTables = tableList.length;
+      let processedTables = 0;
+
+      for (const tableName of tableList) {
+        try {
+          const tableMetadata: TableMetadata = {
+            name: tableName,
+            schema: schemaName,
+            columns: [],
+            indexes: [],
+            foreign_keys: []
+          };
+
+          // Get table columns (if enabled)
+          if (includeColumns) {
+            tableMetadata.columns = await this.fetchTableColumns(
+              connection,
+              schemaName,
+              tableName,
+              connectionId,
+              userId
+            );
+            totalColumns += tableMetadata.columns.length;
+          }
+
+          // Get table indexes (if enabled)
+          if (includeIndexes) {
+            tableMetadata.indexes = await this.fetchTableIndexes(
+              connection,
+              schemaName,
+              tableName,
+              connectionId,
+              userId
+            );
+          }
+
+          // Get foreign keys (if enabled)
+          if (includeForeignKeys) {
+            tableMetadata.foreign_keys = await this.fetchTableForeignKeys(
+              connection,
+              schemaName,
+              tableName,
+              connectionId,
+              userId
+            );
+          }
+
+          // Get approximate row count (optional)
+          try {
+            const rowCount = await this.fetchTableRowCount(
+              connection,
+              schemaName,
+              tableName,
+              connectionId,
+              userId
+            );
+            if (rowCount !== undefined) {
+              tableMetadata.row_count = rowCount;
+            }
+          } catch (error) {
+            // Row count is optional, continue if it fails
+          }
+
+          tables.push(tableMetadata);
+          processedTables++;
+
+          // Report progress
+          if (progressCallback) {
+            const schemaProgress = (processedSchemas / totalSchemas) * 100;
+            const tableProgress = (processedTables / totalTables) * (100 / totalSchemas);
+            await progressCallback(Math.min(10 + schemaProgress + tableProgress, 90));
+          }
+        } catch (error) {
+          // Continue with other tables even if one fails
+          console.error(`Error fetching metadata for table ${schemaName}.${tableName}:`, error);
+        }
+      }
+
+      totalTables += tables.length;
+      schemas.push({
+        name: schemaName,
+        tables
+      });
+
+      processedSchemas++;
+    }
+
+    const version = await this.fetchDatabaseVersion(connectionId, userId);
+    const dbType = (connection as any).dbType || connection.db_type;
+    const schemaData: CachedSchemaData = {
+      schemas,
+      total_tables: totalTables,
+      total_columns: totalColumns,
+      database_type: dbType
+    };
+
+    if (version !== undefined) {
+      schemaData.version = version;
+    }
+
+    return schemaData;
   }
 
   /**

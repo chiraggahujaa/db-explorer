@@ -9,6 +9,7 @@ import fileRoutes from './routes/files.js';
 import connectionRoutes from './routes/connections.js';
 import invitationRoutes from './routes/invitations.js';
 import chatSessionRoutes from './routes/chatSessions.js';
+import jobRoutes from './routes/jobs.js';
 
 // Import middleware
 import {
@@ -29,6 +30,9 @@ import {
 
 // Import services
 import { schemaTrainingScheduler } from './services/SchemaTrainingScheduler.js';
+import { JobQueueService } from './services/JobQueueService.js';
+import { JobWorker } from './workers/JobWorker.js';
+import { NotificationService } from './services/NotificationService.js';
 
 const environment = process.env.NODE_ENV || 'development';
 console.log(`Loading environment: ${environment}`);
@@ -88,6 +92,7 @@ app.use('/api/files', uploadRateLimit, fileRoutes);
 app.use('/api/connections', apiRateLimit, connectionRoutes);
 app.use('/api/invitations', apiRateLimit, invitationRoutes);
 app.use('/api/chat-sessions', apiRateLimit, chatSessionRoutes);
+app.use('/api/jobs', apiRateLimit, jobRoutes);
 
 // 404 handler - must be after all routes
 app.use((req: Request, res: Response) => {
@@ -101,43 +106,80 @@ app.use((req: Request, res: Response) => {
 // Error handling middleware - must be last
 app.use(errorHandler);
 
+// Initialize async job system
+const jobQueue = JobQueueService.getInstance();
+const jobWorker = new JobWorker();
+const notificationService = NotificationService.getInstance();
+
 // Start server
-const server = app.listen(PORT, () => {
+const server = app.listen(PORT, async () => {
   const env = process.env.NODE_ENV || 'development';
-  
+
   let baseUrl;
   if (env === 'production') {
     baseUrl = process.env.RAILWAY_PUBLIC_DOMAIN;
   } else {
     baseUrl = `http://localhost:${PORT}`;
   }
-  
+
   console.log(`🚀 DB Explorer API Server is running on port ${PORT}`);
   console.log(`📊 Environment: ${env}`);
   console.log(`🌐 Health check: ${baseUrl}/health`);
   console.log(`📖 API Base URL: ${baseUrl}/api`);
 
-  // Start schema training scheduler
-  // Default: Every Sunday at 2:00 AM
-  // Can be overridden with SCHEMA_TRAINING_CRON env variable
-  const cronExpression = process.env.SCHEMA_TRAINING_CRON || '0 2 * * 0';
-  schemaTrainingScheduler.start(cronExpression);
-  console.log(`📅 Schema training scheduler started (cron: ${cronExpression})`);
+  // Initialize async job queue and worker
+  try {
+    await jobQueue.initialize();
+    console.log(`✅ Job queue initialized`);
+
+    await jobWorker.start();
+    console.log(`✅ Job worker started`);
+
+    console.log(`🔔 Notification service ready`);
+  } catch (error) {
+    console.error(`❌ Failed to initialize async job system:`, error);
+  }
+
+  // SCHEDULER DISABLED: Schema training now uses async job queue
+  // To re-enable the automatic weekly scheduler, uncomment the lines below:
+  //
+  // const cronExpression = process.env.SCHEMA_TRAINING_CRON || '0 2 * * 0';
+  // schemaTrainingScheduler.start(cronExpression);
+  // console.log(`📅 Schema training scheduler started (cron: ${cronExpression})`);
+  //
+  // Note: Schema training is now handled via async jobs. Users can manually
+  // trigger training via the UI, which will queue jobs for async processing.
 });
 
 // Graceful shutdown
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
   console.log('SIGTERM received, shutting down gracefully...');
-  schemaTrainingScheduler.stop();
+
+  // Shutdown async job system
+  await jobWorker.shutdown();
+  await jobQueue.shutdown();
+  await notificationService.shutdown();
+
+  // Note: If scheduler is re-enabled, uncomment this line:
+  // schemaTrainingScheduler.stop();
+
   server.close(() => {
     console.log('HTTP server closed');
     process.exit(0);
   });
 });
 
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
   console.log('SIGINT received, shutting down gracefully...');
-  schemaTrainingScheduler.stop();
+
+  // Shutdown async job system
+  await jobWorker.shutdown();
+  await jobQueue.shutdown();
+  await notificationService.shutdown();
+
+  // Note: If scheduler is re-enabled, uncomment this line:
+  // schemaTrainingScheduler.stop();
+
   server.close(() => {
     console.log('HTTP server closed');
     process.exit(0);
