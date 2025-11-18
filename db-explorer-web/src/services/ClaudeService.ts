@@ -401,6 +401,26 @@ export class ClaudeService {
   }
 
   /**
+   * Load conversation history from chat messages
+   * Used when resuming an existing chat session
+   */
+  loadHistoryFromMessages(messages: Array<{ role: string; content: string }>): void {
+    this.conversationHistory = messages.map((msg) => ({
+      role: msg.role as 'user' | 'assistant',
+      content: msg.content,
+    }));
+    console.log('[ClaudeService] Loaded conversation history:', this.conversationHistory.length, 'messages');
+  }
+
+  /**
+   * Set conversation history directly
+   * Used for advanced context management (e.g., with summarization)
+   */
+  setHistory(history: Anthropic.MessageParam[]): void {
+    this.conversationHistory = [...history];
+  }
+
+  /**
    * Set system prompt for context
    */
   async sendMessageWithSystem(

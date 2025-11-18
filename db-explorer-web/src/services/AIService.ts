@@ -38,6 +38,8 @@ export interface IAIService {
 
   clearHistory(): void;
   getHistory(): any[];
+  loadHistoryFromMessages(messages: Array<{ role: string; content: string }>): void;
+  setHistory(history: any[]): void;
 }
 
 /**
@@ -78,6 +80,14 @@ class ClaudeServiceAdapter implements IAIService {
   getHistory(): any[] {
     return this.service.getHistory();
   }
+
+  loadHistoryFromMessages(messages: Array<{ role: string; content: string }>): void {
+    this.service.loadHistoryFromMessages(messages);
+  }
+
+  setHistory(history: any[]): void {
+    this.service.setHistory(history);
+  }
 }
 
 /**
@@ -117,6 +127,14 @@ class GeminiServiceAdapter implements IAIService {
 
   getHistory(): any[] {
     return this.service.getHistory();
+  }
+
+  loadHistoryFromMessages(messages: Array<{ role: string; content: string }>): void {
+    this.service.loadHistoryFromMessages(messages);
+  }
+
+  setHistory(history: any[]): void {
+    this.service.setHistory(history);
   }
 }
 

@@ -21,5 +21,6 @@ router.post('/:id/messages', chatSessionController.addMessage.bind(chatSessionCo
 // Context and title generation routes
 router.get('/:id/context', chatSessionController.getContext.bind(chatSessionController));
 router.post('/:id/generate-title', chatSessionController.generateTitle.bind(chatSessionController));
+router.get('/:id/summarize', chatSessionController.getSummarizedContext.bind(chatSessionController));
 
 export default router;
