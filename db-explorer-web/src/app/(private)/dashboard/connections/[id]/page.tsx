@@ -7,9 +7,12 @@ import { connectionsAPI } from "@/lib/api/connections";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
 import { ExplorerSidebar } from "@/components/connections/ExplorerSidebar";
 import { ChatInterface } from "@/components/connections/ChatInterface";
+import { MembersManagement } from "@/components/connections/MembersManagement";
 import { ConnectionExplorerProvider } from "@/contexts/ConnectionExplorerContext";
 import { getClaudeService } from "@/services/ClaudeService";
 import { useMCPStore } from "@/stores/useMCPStore";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { MessageSquare, Users } from "lucide-react";
 
 export default function ConnectionExplorerPage() {
   const params = useParams();
@@ -17,14 +20,17 @@ export default function ConnectionExplorerPage() {
   const router = useRouter();
   const connectionId = params.id as string;
   const chatSessionIdFromUrl = searchParams.get("chatId");
+  const tabFromUrl = searchParams.get("tab") || "chat";
 
   console.log('[ConnectionExplorerPage] Rendering with:', {
     connectionId,
     chatSessionIdFromUrl,
+    tabFromUrl,
     paramsId: params.id,
   });
 
   const [activeChatSessionId, setActiveChatSessionId] = useState<string | undefined>(undefined);
+  const [activeTab, setActiveTab] = useState(tabFromUrl);
 
   const { data: connection, isLoading: isLoadingConnection, error: connectionError } = useQuery({
     queryKey: ["connection", connectionId],
@@ -47,6 +53,25 @@ export default function ConnectionExplorerPage() {
     // Update state whenever URL chatId changes (including when it's removed)
     setActiveChatSessionId(chatSessionIdFromUrl || undefined);
   }, [chatSessionIdFromUrl]);
+
+  // Sync activeTab with URL parameter
+  useEffect(() => {
+    setActiveTab(tabFromUrl);
+  }, [tabFromUrl]);
+
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
+    const params = new URLSearchParams(searchParams.toString());
+    if (value === "chat") {
+      params.delete("tab");
+    } else {
+      params.set("tab", value);
+    }
+    const newUrl = params.toString()
+      ? `/dashboard/connections/${connectionId}?${params.toString()}`
+      : `/dashboard/connections/${connectionId}`;
+    router.push(newUrl);
+  };
 
   const handleNewChat = useCallback(() => {
     if (!connectionId) {
@@ -129,25 +154,57 @@ export default function ConnectionExplorerPage() {
   }
 
   console.log('[ConnectionExplorerPage] Rendering main content for connection:', connection.name);
+
+  // Only show Members tab for owners
+  const canManageMembers = connection.userRole === "owner";
+
   return (
     <ConnectionExplorerProvider key={connectionId}>
-      <div className="flex h-full overflow-hidden">
-        {/* Left Sidebar */}
-        <ExplorerSidebar
-          initialConnectionId={connectionId}
-          onNewChat={handleNewChat}
-          onSelectChat={handleSelectChat}
-          currentChatSessionId={activeChatSessionId}
-        />
-
-        {/* Main Content Area */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <ChatInterface
-            connection={connection}
-            chatSessionId={activeChatSessionId}
-          />
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="h-full flex flex-col">
+        {/* Tab Navigation */}
+        <div className="border-b bg-background px-6 py-2">
+          <TabsList className={`grid w-full max-w-md ${canManageMembers ? 'grid-cols-2' : 'grid-cols-1'}`}>
+            <TabsTrigger value="chat" className="flex items-center gap-2">
+              <MessageSquare className="h-4 w-4" />
+              Chat
+            </TabsTrigger>
+            {canManageMembers && (
+              <TabsTrigger value="members" className="flex items-center gap-2">
+                <Users className="h-4 w-4" />
+                Members
+              </TabsTrigger>
+            )}
+          </TabsList>
         </div>
-      </div>
+
+        {/* Chat Tab */}
+        <TabsContent value="chat" className="flex-1 overflow-hidden mt-0">
+          <div className="flex h-full overflow-hidden">
+            {/* Left Sidebar */}
+            <ExplorerSidebar
+              initialConnectionId={connectionId}
+              onNewChat={handleNewChat}
+              onSelectChat={handleSelectChat}
+              currentChatSessionId={activeChatSessionId}
+            />
+
+            {/* Main Content Area */}
+            <div className="flex-1 flex flex-col overflow-hidden">
+              <ChatInterface
+                connection={connection}
+                chatSessionId={activeChatSessionId}
+              />
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* Members Tab */}
+        {canManageMembers && (
+          <TabsContent value="members" className="flex-1 overflow-auto mt-0">
+            <MembersManagement connection={connection} />
+          </TabsContent>
+        )}
+      </Tabs>
     </ConnectionExplorerProvider>
   );
 }
