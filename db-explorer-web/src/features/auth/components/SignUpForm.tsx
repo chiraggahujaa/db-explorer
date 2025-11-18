@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useRouter } from 'next/navigation';
+import { useTheme } from 'next-themes';
 import { useAuth } from '../hooks/useAuth';
 import { registerSchema } from '../validations';
 import { Button } from '@/components/ui/button';
@@ -25,6 +26,7 @@ type SignUpFormData = {
 export function SignUpForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const { theme } = useTheme();
   const router = useRouter();
   const { register, isRegistering, user } = useAuth();
 
@@ -197,11 +199,14 @@ export function SignUpForm() {
 
           <div className="flex flex-col gap-3 items-center">
             {googleClientId ? (
-              <GoogleLogin
-                onSuccess={(cred) => cred.credential && handleGoogleCredential(cred.credential)}
-                onError={handleGoogleError}
-                useOneTap
-              />
+              <div style={{ colorScheme: 'light' }}>
+                <GoogleLogin
+                  onSuccess={(cred) => cred.credential && handleGoogleCredential(cred.credential)}
+                  onError={handleGoogleError}
+                  useOneTap
+                  theme={theme === 'dark' ? 'filled_black' : 'outline'}
+                />
+              </div>
             ) : (
               <div className="text-sm text-muted-foreground p-2">
                 Google Sign-In is not configured

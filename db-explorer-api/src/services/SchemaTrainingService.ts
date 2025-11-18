@@ -1,4 +1,4 @@
-import { supabase } from '../config/supabase.js';
+import { supabaseAdmin } from '../lib/supabase.js';
 import { ConnectionService } from './ConnectionService.js';
 import { DatabaseExplorerService } from './DatabaseExplorerService.js';
 import {
@@ -11,7 +11,7 @@ import {
   ForeignKeyMetadata,
   DatabaseType
 } from '../types/connection.js';
-import { DataMapper } from '../utils/dataMapper.js';
+import { DataMapper } from '../utils/mappers.js';
 
 export class SchemaTrainingService {
   private connectionService: ConnectionService;
@@ -83,10 +83,11 @@ export class SchemaTrainingService {
     userId: string
   ): Promise<CachedSchemaData> {
     // Get connection config
-    const connection = await this.connectionService.getConnectionByIdInternal(connectionId, userId);
-    if (!connection) {
+    const connectionResponse = await this.connectionService.getConnectionByIdInternal(connectionId, userId);
+    if (!connectionResponse.success || !connectionResponse.data) {
       throw new Error('Connection not found');
     }
+    const connection = connectionResponse.data;
 
     const schemas: SchemaMetadata[] = [];
     let totalTables = 0;
@@ -106,7 +107,6 @@ export class SchemaTrainingService {
       // Get tables in this schema
       const tablesResponse = await this.explorerService.getTables(connectionId, userId, schemaName);
       if (!tablesResponse.success || !tablesResponse.data) {
-        console.warn(`Failed to fetch tables for schema ${schemaName}:`, tablesResponse.error);
         continue;
       }
       const tableList = tablesResponse.data.map(t => t.name);
@@ -114,35 +114,37 @@ export class SchemaTrainingService {
       for (const tableName of tableList) {
         try {
           // Get table columns
-          const columns = await this.fetchTableColumns(connectionId, schemaName, tableName, userId);
+          const columns = await this.fetchTableColumns(connection, schemaName, tableName, connectionId, userId);
 
           // Get table indexes
-          const indexes = await this.fetchTableIndexes(connectionId, schemaName, tableName, userId);
+          const indexes = await this.fetchTableIndexes(connection, schemaName, tableName, connectionId, userId);
 
           // Get foreign keys
-          const foreignKeys = await this.fetchTableForeignKeys(connectionId, schemaName, tableName, userId);
+          const foreignKeys = await this.fetchTableForeignKeys(connection, schemaName, tableName, connectionId, userId);
 
           // Get approximate row count (optional, can be slow for large tables)
           let rowCount: number | undefined;
           try {
-            rowCount = await this.fetchTableRowCount(connectionId, schemaName, tableName, userId);
+            rowCount = await this.fetchTableRowCount(connection, schemaName, tableName, connectionId, userId);
           } catch (error) {
             // Row count is optional, continue if it fails
-            console.warn(`Failed to get row count for ${schemaName}.${tableName}:`, error);
           }
 
-          tables.push({
+          const tableMetadata: TableMetadata = {
             name: tableName,
             schema: schemaName,
             columns,
             indexes,
-            foreign_keys: foreignKeys,
-            row_count: rowCount
-          });
+            foreign_keys: foreignKeys
+          };
 
+          if (rowCount !== undefined) {
+            tableMetadata.row_count = rowCount;
+          }
+
+          tables.push(tableMetadata);
           totalColumns += columns.length;
         } catch (error) {
-          console.error(`Failed to fetch metadata for table ${schemaName}.${tableName}:`, error);
           // Continue with other tables even if one fails
         }
       }
@@ -154,33 +156,37 @@ export class SchemaTrainingService {
       });
     }
 
-    return {
+    const version = await this.fetchDatabaseVersion(connectionId, userId);
+    const dbType = (connection as any).dbType || connection.db_type;
+    const schemaData: CachedSchemaData = {
       schemas,
       total_tables: totalTables,
       total_columns: totalColumns,
-      database_type: connection.db_type,
-      version: await this.fetchDatabaseVersion(connectionId, userId)
+      database_type: dbType
     };
+
+    if (version !== undefined) {
+      schemaData.version = version;
+    }
+
+    return schemaData;
   }
 
   /**
    * Fetch column metadata for a table
    */
   private async fetchTableColumns(
-    connectionId: string,
+    connection: any,
     schema: string,
     table: string,
+    connectionId: string,
     userId: string
   ): Promise<ColumnMetadata[]> {
-    const connection = await this.connectionService.getConnectionByIdInternal(connectionId, userId);
-    if (!connection) {
-      throw new Error('Connection not found');
-    }
-
     let query: string;
-    const fullTableName = connection.db_type === 'sqlite' ? table : `${schema}.${table}`;
+    const dbType = (connection as any).dbType || connection.db_type;
+    const fullTableName = dbType === 'sqlite' ? table : `${schema}.${table}`;
 
-    switch (connection.db_type) {
+    switch (dbType) {
       case 'mysql':
         query = `
           SELECT
@@ -233,13 +239,15 @@ export class SchemaTrainingService {
         break;
 
       default:
-        throw new Error(`Unsupported database type: ${connection.db_type}`);
+        throw new Error(`Unsupported database type: ${dbType}`);
     }
 
-    const results = await this.explorerService.executeQuery(connectionId, query, userId);
+    // For MySQL, don't include database in connection when querying INFORMATION_SCHEMA
+    const includeDatabase = dbType !== 'mysql';
+    const results = await this.explorerService.executeQuery(connectionId, query, userId, includeDatabase);
 
     // Transform SQLite results to match our format
-    if (connection.db_type === 'sqlite') {
+    if (dbType === 'sqlite') {
       return results.map((row: any) => ({
         name: row.name,
         type: row.type,
@@ -266,19 +274,16 @@ export class SchemaTrainingService {
    * Fetch index metadata for a table
    */
   private async fetchTableIndexes(
-    connectionId: string,
+    connection: any,
     schema: string,
     table: string,
+    connectionId: string,
     userId: string
   ): Promise<IndexMetadata[]> {
-    const connection = await this.connectionService.getConnectionByIdInternal(connectionId, userId);
-    if (!connection) {
-      throw new Error('Connection not found');
-    }
-
+    const dbType = (connection as any).dbType || connection.db_type;
     let query: string;
 
-    switch (connection.db_type) {
+    switch (dbType) {
       case 'mysql':
         query = `SHOW INDEX FROM \`${schema}\`.\`${table}\``;
         break;
@@ -310,23 +315,25 @@ export class SchemaTrainingService {
     }
 
     try {
-      const results = await this.explorerService.executeQuery(connectionId, query, userId);
+      // For MySQL, don't include database in connection when querying INFORMATION_SCHEMA
+      const includeDatabase = dbType !== 'mysql';
+      const results = await this.explorerService.executeQuery(connectionId, query, userId, includeDatabase);
 
-      if (connection.db_type === 'mysql') {
+      if (dbType === 'mysql') {
         return results.map((row: any) => ({
           name: row.Key_name,
           column_name: row.Column_name,
           is_unique: row.Non_unique === 0,
           index_type: row.Index_type
         }));
-      } else if (connection.db_type === 'postgresql' || connection.db_type === 'supabase') {
+      } else if (dbType === 'postgresql' || dbType === 'supabase') {
         return results.map((row: any) => ({
           name: row.index_name,
           column_name: row.column_name,
           is_unique: row.is_unique,
           index_type: row.index_type
         }));
-      } else if (connection.db_type === 'sqlite') {
+      } else if (dbType === 'sqlite') {
         return results.map((row: any) => ({
           name: row.name,
           column_name: '', // SQLite needs additional query for column info
@@ -337,7 +344,6 @@ export class SchemaTrainingService {
 
       return [];
     } catch (error) {
-      console.warn(`Failed to fetch indexes for ${schema}.${table}:`, error);
       return [];
     }
   }
@@ -346,32 +352,32 @@ export class SchemaTrainingService {
    * Fetch foreign key metadata for a table
    */
   private async fetchTableForeignKeys(
-    connectionId: string,
+    connection: any,
     schema: string,
     table: string,
+    connectionId: string,
     userId: string
   ): Promise<ForeignKeyMetadata[]> {
-    const connection = await this.connectionService.getConnectionByIdInternal(connectionId, userId);
-    if (!connection) {
-      throw new Error('Connection not found');
-    }
-
+    const dbType = (connection as any).dbType || connection.db_type;
     let query: string;
 
-    switch (connection.db_type) {
+    switch (dbType) {
       case 'mysql':
         query = `
           SELECT
-            COLUMN_NAME as column_name,
-            REFERENCED_TABLE_NAME as referenced_table,
-            REFERENCED_COLUMN_NAME as referenced_column,
-            CONSTRAINT_NAME as constraint_name,
-            UPDATE_RULE as update_rule,
-            DELETE_RULE as delete_rule
-          FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
-          WHERE TABLE_SCHEMA = '${schema}'
-            AND TABLE_NAME = '${table}'
-            AND REFERENCED_TABLE_NAME IS NOT NULL
+            kcu.COLUMN_NAME as column_name,
+            kcu.REFERENCED_TABLE_NAME as referenced_table,
+            kcu.REFERENCED_COLUMN_NAME as referenced_column,
+            kcu.CONSTRAINT_NAME as constraint_name,
+            rc.UPDATE_RULE as update_rule,
+            rc.DELETE_RULE as delete_rule
+          FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu
+          LEFT JOIN INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS rc
+            ON kcu.CONSTRAINT_NAME = rc.CONSTRAINT_NAME
+            AND kcu.TABLE_SCHEMA = rc.CONSTRAINT_SCHEMA
+          WHERE kcu.TABLE_SCHEMA = '${schema}'
+            AND kcu.TABLE_NAME = '${table}'
+            AND kcu.REFERENCED_TABLE_NAME IS NOT NULL
         `;
         break;
 
@@ -410,9 +416,11 @@ export class SchemaTrainingService {
     }
 
     try {
-      const results = await this.explorerService.executeQuery(connectionId, query, userId);
+      // For MySQL, don't include database in connection when querying INFORMATION_SCHEMA
+      const includeDatabase = dbType !== 'mysql';
+      const results = await this.explorerService.executeQuery(connectionId, query, userId, includeDatabase);
 
-      if (connection.db_type === 'sqlite') {
+      if (dbType === 'sqlite') {
         return results.map((row: any) => ({
           column_name: row.from,
           referenced_table: row.table,
@@ -432,7 +440,6 @@ export class SchemaTrainingService {
         delete_rule: row.delete_rule
       }));
     } catch (error) {
-      console.warn(`Failed to fetch foreign keys for ${schema}.${table}:`, error);
       return [];
     }
   }
@@ -441,19 +448,16 @@ export class SchemaTrainingService {
    * Fetch approximate row count for a table
    */
   private async fetchTableRowCount(
-    connectionId: string,
+    connection: any,
     schema: string,
     table: string,
+    connectionId: string,
     userId: string
   ): Promise<number | undefined> {
-    const connection = await this.connectionService.getConnectionByIdInternal(connectionId, userId);
-    if (!connection) {
-      throw new Error('Connection not found');
-    }
-
+    const dbType = (connection as any).dbType || connection.db_type;
     let query: string;
 
-    switch (connection.db_type) {
+    switch (dbType) {
       case 'mysql':
         query = `
           SELECT TABLE_ROWS as count
@@ -482,7 +486,9 @@ export class SchemaTrainingService {
     }
 
     try {
-      const results = await this.explorerService.executeQuery(connectionId, query, userId);
+      // For MySQL, don't include database in connection when querying INFORMATION_SCHEMA
+      const includeDatabase = dbType !== 'mysql';
+      const results = await this.explorerService.executeQuery(connectionId, query, userId, includeDatabase);
       return results[0]?.count || 0;
     } catch (error) {
       return undefined;
@@ -496,14 +502,16 @@ export class SchemaTrainingService {
     connectionId: string,
     userId: string
   ): Promise<string | undefined> {
-    const connection = await this.connectionService.getConnectionByIdInternal(connectionId, userId);
-    if (!connection) {
+    const connectionResponse = await this.connectionService.getConnectionByIdInternal(connectionId, userId);
+    if (!connectionResponse.success || !connectionResponse.data) {
       return undefined;
     }
+    const connection = connectionResponse.data;
+    const dbType = (connection as any).dbType || connection.db_type;
 
     let query: string;
 
-    switch (connection.db_type) {
+    switch (dbType) {
       case 'mysql':
         query = 'SELECT VERSION() as version';
         break;
@@ -522,7 +530,9 @@ export class SchemaTrainingService {
     }
 
     try {
-      const results = await this.explorerService.executeQuery(connectionId, query, userId);
+      // For MySQL, don't include database in connection
+      const includeDatabase = dbType !== 'mysql';
+      const results = await this.explorerService.executeQuery(connectionId, query, userId, includeDatabase);
       return results[0]?.version;
     } catch (error) {
       return undefined;
@@ -533,7 +543,7 @@ export class SchemaTrainingService {
    * Get schema cache for a connection
    */
   async getSchemaCache(connectionId: string): Promise<ConnectionSchemaCache | null> {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('connection_schema_cache')
       .select('*')
       .eq('connection_id', connectionId)
@@ -580,7 +590,7 @@ export class SchemaTrainingService {
 
     if (existing) {
       // Update existing
-      const { error } = await supabase
+      const { error } = await supabaseAdmin
         .from('connection_schema_cache')
         .update(DataMapper.toSnakeCase(updateData))
         .eq('connection_id', connectionId);
@@ -588,7 +598,7 @@ export class SchemaTrainingService {
       if (error) throw error;
     } else {
       // Create new
-      const { error } = await supabase
+      const { error } = await supabaseAdmin
         .from('connection_schema_cache')
         .insert(DataMapper.toSnakeCase({
           connection_id: connectionId,
@@ -622,7 +632,7 @@ export class SchemaTrainingService {
     let result;
     if (existing) {
       // Update existing
-      const { data, error } = await supabase
+      const { data, error } = await supabaseAdmin
         .from('connection_schema_cache')
         .update(DataMapper.toSnakeCase(cacheData))
         .eq('connection_id', connectionId)
@@ -633,7 +643,7 @@ export class SchemaTrainingService {
       result = data;
     } else {
       // Create new
-      const { data, error } = await supabase
+      const { data, error } = await supabaseAdmin
         .from('connection_schema_cache')
         .insert(DataMapper.toSnakeCase(cacheData))
         .select()
@@ -653,7 +663,7 @@ export class SchemaTrainingService {
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
     // Get all active connections
-    const { data: connections, error: connError } = await supabase
+    const { data: connections, error: connError } = await supabaseAdmin
       .from('database_connections')
       .select('id')
       .eq('is_active', true);
@@ -664,7 +674,7 @@ export class SchemaTrainingService {
     if (connectionIds.length === 0) return [];
 
     // Get caches that are older than 7 days or don't exist
-    const { data: caches, error: cacheError } = await supabase
+    const { data: caches, error: cacheError } = await supabaseAdmin
       .from('connection_schema_cache')
       .select('connection_id, last_trained_at')
       .in('connection_id', connectionIds)
@@ -688,7 +698,7 @@ export class SchemaTrainingService {
    * Delete schema cache for a connection
    */
   async deleteSchemaCache(connectionId: string): Promise<void> {
-    const { error } = await supabase
+    const { error } = await supabaseAdmin
       .from('connection_schema_cache')
       .delete()
       .eq('connection_id', connectionId);

@@ -220,7 +220,8 @@ export class DatabaseExplorerService {
   async executeQuery(
     connectionId: string,
     query: string,
-    userId: string
+    userId: string,
+    includeDatabase: boolean = true
   ): Promise<any[]> {
     let dbConnection: any = null;
 
@@ -228,7 +229,7 @@ export class DatabaseExplorerService {
       const { dbConnection: conn } = await this.getDatabaseConnection(
         connectionId,
         userId,
-        true
+        includeDatabase
       );
       dbConnection = conn;
 
