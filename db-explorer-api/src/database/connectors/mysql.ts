@@ -3,6 +3,8 @@
 
 import mysql from 'mysql2/promise';
 import { BaseDatabaseConnection, type DatabaseConfig, type QueryResult } from './base.js';
+import { getCachedIAMAuthToken, isIAMAuthEnabled, validateIAMConfig } from '../../utils/iam-auth.js';
+import type { SQLConnectionConfig } from '../../types/connection.js';
 
 const DEFAULT_PORT = 3306;
 const CONNECTION_DEFAULTS = {
@@ -27,13 +29,40 @@ export class MySQLConnection extends BaseDatabaseConnection {
         await this.disconnect();
       }
 
+      let password = this.config.password;
+
+      // Handle IAM authentication
+      const sqlConfig = this.config as any as SQLConnectionConfig;
+      if (isIAMAuthEnabled(sqlConfig)) {
+        const iamAuth = sqlConfig.iam_auth!;
+
+        // Validate IAM config
+        validateIAMConfig(iamAuth);
+
+        // Generate IAM authentication token
+        const token = await getCachedIAMAuthToken({
+          hostname: this.config.host!,
+          port: this.config.port || DEFAULT_PORT,
+          username: this.config.user || this.config.username || '',
+          region: iamAuth.region,
+          iamConfig: iamAuth,
+        });
+
+        password = token;
+
+        // Ensure SSL is enabled for IAM authentication
+        if (this.config.ssl === false) {
+          throw new Error('SSL must be enabled for IAM authentication');
+        }
+      }
+
       // For MySQL, don't require a database name - we can connect without it
       // This allows us to list databases first
       const poolConfig: any = {
         host: this.config.host,
         port: this.config.port || DEFAULT_PORT,
         user: this.config.user || this.config.username,
-        password: this.config.password,
+        password: password,
         connectionLimit: CONNECTION_DEFAULTS.connectionLimit,
         idleTimeout: CONNECTION_DEFAULTS.idleTimeout,
         queueLimit: CONNECTION_DEFAULTS.queueLimit,

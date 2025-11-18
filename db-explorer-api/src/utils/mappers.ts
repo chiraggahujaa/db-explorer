@@ -316,6 +316,10 @@ export function sanitizeConnectionConfig(config: any): any {
     'token',
     'auth_token',
     'authToken',
+    'access_key_id',
+    'accessKeyId',
+    'secret_access_key',
+    'secretAccessKey',
   ];
 
   sensitiveFields.forEach((field) => {
@@ -323,6 +327,17 @@ export function sanitizeConnectionConfig(config: any): any {
       delete sanitized[field];
     }
   });
+
+  // Also sanitize nested iam_auth object if present
+  if (sanitized.iam_auth && typeof sanitized.iam_auth === 'object') {
+    const iamAuth = { ...sanitized.iam_auth };
+    sensitiveFields.forEach((field) => {
+      if (field in iamAuth) {
+        delete iamAuth[field];
+      }
+    });
+    sanitized.iam_auth = iamAuth;
+  }
 
   return sanitized;
 }

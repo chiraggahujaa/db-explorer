@@ -3,6 +3,8 @@
 
 import { Pool, Client } from 'pg';
 import { BaseDatabaseConnection, type DatabaseConfig, type QueryResult } from './base.js';
+import { getCachedIAMAuthToken, isIAMAuthEnabled, validateIAMConfig } from '../../utils/iam-auth.js';
+import type { SQLConnectionConfig } from '../../types/connection.js';
 
 const DEFAULT_PORT = 5432;
 
@@ -16,7 +18,7 @@ export class PostgreSQLConnection extends BaseDatabaseConnection {
         await this.disconnect();
       }
 
-      const connectionString = this.config.connectionString || this.buildConnectionString();
+      const connectionString = this.config.connectionString || await this.buildConnectionString();
 
       // Use connection pool for better performance
       this.pool = new Pool({
@@ -170,16 +172,41 @@ export class PostgreSQLConnection extends BaseDatabaseConnection {
     }
   }
 
-  private buildConnectionString(): string {
+  private async buildConnectionString(): Promise<string> {
     const user = this.config.user || this.config.username || 'postgres';
-    const password = this.config.password || '';
+    let password = this.config.password || '';
     const host = this.config.host || 'localhost';
     const port = this.config.port || DEFAULT_PORT;
     const database = this.config.database || 'postgres';
 
-    let connectionString = `postgresql://${user}:${password}@${host}:${port}/${database}`;
+    // Handle IAM authentication
+    const sqlConfig = this.config as any as SQLConnectionConfig;
+    if (isIAMAuthEnabled(sqlConfig)) {
+      const iamAuth = sqlConfig.iam_auth!;
 
-    if (this.config.ssl) {
+      // Validate IAM config
+      validateIAMConfig(iamAuth);
+
+      // Generate IAM authentication token
+      const token = await getCachedIAMAuthToken({
+        hostname: host,
+        port: port,
+        username: user,
+        region: iamAuth.region,
+        iamConfig: iamAuth,
+      });
+
+      password = token;
+
+      // Ensure SSL is enabled for IAM authentication
+      if (this.config.ssl === false) {
+        throw new Error('SSL must be enabled for IAM authentication');
+      }
+    }
+
+    let connectionString = `postgresql://${user}:${encodeURIComponent(password)}@${host}:${port}/${database}`;
+
+    if (this.config.ssl || isIAMAuthEnabled(sqlConfig)) {
       connectionString += '?sslmode=require';
     }
 

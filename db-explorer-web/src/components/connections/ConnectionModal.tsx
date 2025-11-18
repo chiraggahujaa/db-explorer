@@ -28,6 +28,8 @@ import type {
   ConnectionWithRole,
   CreateConnectionRequest,
   UpdateConnectionRequest,
+  SQLAuthType,
+  IAMCredentialType,
 } from "@/types/connection";
 
 interface ConnectionModalProps {
@@ -48,6 +50,14 @@ interface FormData {
   username?: string;
   password?: string;
   ssl?: boolean;
+  // IAM auth fields
+  authType?: SQLAuthType;
+  iamCredentialType?: IAMCredentialType;
+  iamRegion?: string;
+  iamAccessKeyId?: string;
+  iamSecretAccessKey?: string;
+  iamProfile?: string;
+  iamCredentialFilePath?: string;
   // SQLite config fields
   filePath?: string;
   // Supabase config fields
@@ -76,11 +86,15 @@ export function ConnectionModal({
       name: "",
       description: "",
       dbType: "mysql",
+      authType: "password",
+      iamCredentialType: "accessKey",
       ssl: false,
     },
   });
 
   const dbType = watch("dbType");
+  const authType = watch("authType");
+  const iamCredentialType = watch("iamCredentialType");
 
   useEffect(() => {
     if (connection && open) {
@@ -98,6 +112,13 @@ export function ConnectionModal({
         username: config.username,
         password: config.password,
         ssl: config.ssl,
+        authType: config.authType || config.auth_type || "password",
+        iamCredentialType: config.iamAuth?.credentialType || config.iam_auth?.credential_type || "accessKey",
+        iamRegion: config.iamAuth?.region || config.iam_auth?.region,
+        iamAccessKeyId: config.iamAuth?.accessKeyId || config.iam_auth?.access_key_id,
+        iamSecretAccessKey: config.iamAuth?.secretAccessKey || config.iam_auth?.secret_access_key,
+        iamProfile: config.iamAuth?.profile || config.iam_auth?.profile,
+        iamCredentialFilePath: config.iamAuth?.credentialFilePath || config.iam_auth?.credential_file_path,
         filePath: config.filePath || config.file_path,
         url: config.url,
         anonKey: config.anonKey || config.anon_key,
@@ -110,6 +131,8 @@ export function ConnectionModal({
         name: "",
         description: "",
         dbType: "mysql",
+        authType: "password",
+        iamCredentialType: "accessKey",
         ssl: false,
       });
     }
@@ -134,15 +157,46 @@ export function ConnectionModal({
           db_password: data.dbPassword,
         } as any; // Backend expects snake_case for config
       } else {
-        config = {
+        // MySQL or PostgreSQL with optional IAM auth
+        const sqlConfig: any = {
           type: data.dbType as "mysql" | "postgresql",
           host: data.host!,
           port: data.port!,
           database: data.database!,
           username: data.username!,
-          password: data.password!,
+          auth_type: data.authType || "password",
           ssl: data.ssl,
         };
+
+        // Add password or IAM auth config based on auth type
+        if (data.authType === "iam") {
+          // Build IAM auth config (backend expects snake_case)
+          const iamAuth: any = {
+            credential_type: data.iamCredentialType!,
+            region: data.iamRegion!,
+          };
+
+          if (data.iamCredentialType === "accessKey") {
+            iamAuth.access_key_id = data.iamAccessKeyId!;
+            iamAuth.secret_access_key = data.iamSecretAccessKey!;
+          } else if (data.iamCredentialType === "credentialFile") {
+            if (data.iamProfile) {
+              iamAuth.profile = data.iamProfile;
+            }
+            if (data.iamCredentialFilePath) {
+              iamAuth.credential_file_path = data.iamCredentialFilePath;
+            }
+          }
+
+          sqlConfig.iam_auth = iamAuth;
+          // Ensure SSL is enabled for IAM
+          sqlConfig.ssl = true;
+        } else {
+          // Password auth
+          sqlConfig.password = data.password!;
+        }
+
+        config = sqlConfig;
       }
 
       if (connection) {
@@ -302,40 +356,173 @@ export function ConnectionModal({
             <p className="text-sm text-destructive">{errors.database.message}</p>
           )}
         </div>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="username">Username *</Label>
-            <Input
-              id="username"
-              {...register("username", { required: "Username is required" })}
-              placeholder="root"
-            />
-            {errors.username && (
-              <p className="text-sm text-destructive">{errors.username.message}</p>
-            )}
-          </div>
+        <div className="space-y-2">
+          <Label htmlFor="username">Username *</Label>
+          <Input
+            id="username"
+            {...register("username", { required: "Username is required" })}
+            placeholder="root"
+          />
+          {errors.username && (
+            <p className="text-sm text-destructive">{errors.username.message}</p>
+          )}
+        </div>
+
+        {/* Authentication Type Selection */}
+        <div className="space-y-2">
+          <Label htmlFor="authType">Authentication Type *</Label>
+          <Select
+            value={authType || "password"}
+            onValueChange={(value) => setValue("authType", value as SQLAuthType)}
+          >
+            <SelectTrigger id="authType">
+              <SelectValue placeholder="Select authentication type" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="password">Password</SelectItem>
+              <SelectItem value="iam">IAM Authentication (AWS RDS)</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Password Authentication Fields */}
+        {authType === "password" && (
           <div className="space-y-2">
             <Label htmlFor="password">Password *</Label>
             <Input
               id="password"
               type="password"
-              {...register("password", { required: "Password is required" })}
+              {...register("password", {
+                required: authType === "password" ? "Password is required" : false
+              })}
               placeholder="••••••••"
             />
             {errors.password && (
               <p className="text-sm text-destructive">{errors.password.message}</p>
             )}
           </div>
-        </div>
+        )}
+
+        {/* IAM Authentication Fields */}
+        {authType === "iam" && (
+          <div className="space-y-4 p-4 border rounded-lg bg-muted/50">
+            <h4 className="font-medium text-sm">IAM Authentication Configuration</h4>
+
+            <div className="space-y-2">
+              <Label htmlFor="iamRegion">AWS Region *</Label>
+              <Input
+                id="iamRegion"
+                {...register("iamRegion", {
+                  required: authType === "iam" ? "AWS region is required for IAM auth" : false
+                })}
+                placeholder="us-east-1"
+              />
+              {errors.iamRegion && (
+                <p className="text-sm text-destructive">{errors.iamRegion.message}</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="iamCredentialType">Credential Type *</Label>
+              <Select
+                value={iamCredentialType || "accessKey"}
+                onValueChange={(value) => setValue("iamCredentialType", value as IAMCredentialType)}
+              >
+                <SelectTrigger id="iamCredentialType">
+                  <SelectValue placeholder="Select credential type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="accessKey">Access Key & Secret Key</SelectItem>
+                  <SelectItem value="credentialFile">AWS Credentials File</SelectItem>
+                  <SelectItem value="default">Default Provider Chain</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Access Key Credentials */}
+            {iamCredentialType === "accessKey" && (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="iamAccessKeyId">Access Key ID *</Label>
+                  <Input
+                    id="iamAccessKeyId"
+                    {...register("iamAccessKeyId", {
+                      required: iamCredentialType === "accessKey" ? "Access key ID is required" : false
+                    })}
+                    placeholder="AKIAIOSFODNN7EXAMPLE"
+                  />
+                  {errors.iamAccessKeyId && (
+                    <p className="text-sm text-destructive">{errors.iamAccessKeyId.message}</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="iamSecretAccessKey">Secret Access Key *</Label>
+                  <Input
+                    id="iamSecretAccessKey"
+                    type="password"
+                    {...register("iamSecretAccessKey", {
+                      required: iamCredentialType === "accessKey" ? "Secret access key is required" : false
+                    })}
+                    placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+                  />
+                  {errors.iamSecretAccessKey && (
+                    <p className="text-sm text-destructive">{errors.iamSecretAccessKey.message}</p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Credential File Options */}
+            {iamCredentialType === "credentialFile" && (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="iamProfile">Profile Name</Label>
+                  <Input
+                    id="iamProfile"
+                    {...register("iamProfile")}
+                    placeholder="default"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Leave empty to use the default profile
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="iamCredentialFilePath">Credential File Path</Label>
+                  <Input
+                    id="iamCredentialFilePath"
+                    {...register("iamCredentialFilePath")}
+                    placeholder="~/.aws/credentials"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Leave empty to use the default AWS credentials file
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Default Provider Chain Info */}
+            {iamCredentialType === "default" && (
+              <div className="p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded">
+                <p className="text-sm text-blue-900 dark:text-blue-100">
+                  The default provider chain will automatically use credentials from environment variables,
+                  EC2 instance metadata, or other AWS SDK credential sources.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* SSL Checkbox */}
         <div className="flex items-center space-x-2">
           <input
             type="checkbox"
             id="ssl"
             {...register("ssl")}
             className="rounded border-input"
+            disabled={authType === "iam"}
           />
           <Label htmlFor="ssl" className="cursor-pointer">
-            Enable SSL
+            Enable SSL {authType === "iam" && "(Required for IAM)"}
           </Label>
         </div>
       </div>

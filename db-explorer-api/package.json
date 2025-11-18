@@ -63,6 +63,8 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@aws-sdk/credential-providers": "^3.933.0",
+    "@aws-sdk/rds-signer": "^3.933.0",
     "@google/generative-ai": "^0.21.0",
     "@supabase/supabase-js": "^2.56.1",
     "@types/better-sqlite3": "^7.6.13",

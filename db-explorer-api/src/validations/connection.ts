@@ -8,16 +8,67 @@ export const databaseTypeSchema = z.enum(['mysql', 'postgresql', 'sqlite', 'supa
 // Connection role enum
 export const connectionRoleSchema = z.enum(['owner', 'admin', 'developer', 'tester', 'viewer']);
 
-// MySQL/PostgreSQL config schema
+// Auth type enums
+export const sqlAuthTypeSchema = z.enum(['password', 'iam']);
+export const iamCredentialTypeSchema = z.enum(['accessKey', 'credentialFile', 'default']);
+
+// AWS region validation (common regions)
+const awsRegionSchema = z.string().regex(
+  /^(us|eu|ap|sa|ca|me|af|cn|us-gov)-(east|west|south|north|central|northeast|southeast|northwest|southwest)-[1-3]$/,
+  'Invalid AWS region format'
+);
+
+// IAM authentication config schema
+const iamAuthConfigSchema = z.object({
+  credential_type: iamCredentialTypeSchema,
+  region: awsRegionSchema,
+  access_key_id: z.string().min(16, 'Access key ID must be at least 16 characters').optional(),
+  secret_access_key: z.string().min(40, 'Secret access key must be at least 40 characters').optional(),
+  profile: z.string().min(1, 'Profile name is required').optional(),
+  credential_file_path: z.string().min(1, 'Credential file path is required').optional(),
+}).refine(
+  (data) => {
+    // For 'accessKey' type, both access_key_id and secret_access_key are required
+    if (data.credential_type === 'accessKey') {
+      return data.access_key_id && data.secret_access_key;
+    }
+    return true;
+  },
+  {
+    message: 'Access key ID and secret access key are required for accessKey credential type',
+    path: ['access_key_id'],
+  }
+);
+
+// MySQL/PostgreSQL config schema with IAM support
 const sqlConnectionConfigSchema = z.object({
   type: z.enum(['mysql', 'postgresql']),
   host: z.string().min(1, 'Host is required'),
   port: z.number().int().min(1).max(65535, 'Port must be between 1 and 65535'),
   database: z.string().min(1, 'Database name is required'),
   username: z.string().min(1, 'Username is required'),
-  password: z.string().min(1, 'Password is required'),
+  auth_type: sqlAuthTypeSchema.optional(),
+  password: z.string().min(1, 'Password is required').optional(),
   ssl: z.boolean().optional(),
-});
+  iam_auth: iamAuthConfigSchema.optional(),
+}).refine(
+  (data) => {
+    const authType = data.auth_type || 'password';
+    // For password auth, password is required
+    if (authType === 'password') {
+      return !!data.password;
+    }
+    // For IAM auth, iam_auth is required and SSL must be enabled
+    if (authType === 'iam') {
+      return !!data.iam_auth && data.ssl !== false;
+    }
+    return true;
+  },
+  {
+    message: 'Password is required for password authentication, or IAM auth config is required for IAM authentication (SSL must be enabled for IAM)',
+    path: ['password'],
+  }
+);
 
 // SQLite config schema
 const sqliteConnectionConfigSchema = z.object({

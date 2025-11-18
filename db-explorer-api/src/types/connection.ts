@@ -13,6 +13,20 @@ export interface BaseConnectionConfig {
   type: DatabaseType;
 }
 
+// Auth types for SQL connections
+export type SQLAuthType = 'password' | 'iam';
+export type IAMCredentialType = 'accessKey' | 'credentialFile' | 'default';
+
+// IAM authentication configuration
+export interface IAMAuthConfig {
+  credential_type: IAMCredentialType;
+  region: string; // AWS region (required for IAM)
+  access_key_id?: string; // For accessKey type
+  secret_access_key?: string; // For accessKey type
+  profile?: string; // For credentialFile type (defaults to 'default')
+  credential_file_path?: string; // For credentialFile type (defaults to ~/.aws/credentials)
+}
+
 // MySQL/PostgreSQL configuration
 export interface SQLConnectionConfig extends BaseConnectionConfig {
   type: 'mysql' | 'postgresql';
@@ -20,8 +34,10 @@ export interface SQLConnectionConfig extends BaseConnectionConfig {
   port: number;
   database: string;
   username: string;
-  password: string;
+  auth_type?: SQLAuthType; // Defaults to 'password'
+  password?: string; // Required when auth_type is 'password', optional for IAM
   ssl?: boolean;
+  iam_auth?: IAMAuthConfig; // Required when auth_type is 'iam'
 }
 
 // SQLite configuration
