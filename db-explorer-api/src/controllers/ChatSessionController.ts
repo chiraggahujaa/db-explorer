@@ -3,6 +3,7 @@ import { ChatSessionService } from '../services/ChatSessionService.js';
 import { ChatMessageService } from '../services/ChatMessageService.js';
 import { TitleGenerationService } from '../services/TitleGenerationService.js';
 import { ContextSummaryService } from '../services/ContextSummaryService.js';
+import { ChatSummarizationService } from '../services/ChatSummarizationService.js';
 import {
   createChatSessionSchema,
   updateChatSessionSchema,
@@ -15,12 +16,14 @@ export class ChatSessionController {
   private chatMessageService: ChatMessageService;
   private titleGenerationService: TitleGenerationService;
   private contextSummaryService: ContextSummaryService;
+  private chatSummarizationService: ChatSummarizationService;
 
   constructor() {
     this.chatSessionService = new ChatSessionService();
     this.chatMessageService = new ChatMessageService();
     this.titleGenerationService = new TitleGenerationService();
     this.contextSummaryService = new ContextSummaryService();
+    this.chatSummarizationService = new ChatSummarizationService();
   }
 
   /**
@@ -446,6 +449,60 @@ export class ChatSessionController {
         return res.status(400).json({
           success: false,
           error: 'Invalid connection ID',
+          details: error.issues,
+        });
+      }
+
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error',
+      });
+    }
+  }
+
+  /**
+   * Get summarized context for a chat session
+   * GET /api/chat-sessions/:id/summarize
+   */
+  async getSummarizedContext(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          error: 'User not authenticated',
+        });
+      }
+
+      const { id } = req.params;
+      uuidSchema.parse(id);
+
+      // Verify the chat session belongs to the user
+      const sessionCheck = await this.chatSessionService.findByIdWithMessages(id, userId!);
+      if (!sessionCheck.success) {
+        return res.status(404).json({
+          success: false,
+          error: 'Chat session not found',
+        });
+      }
+
+      // Get options from query params
+      const maxMessagesToKeep = parseInt(req.query.maxMessages as string) || 10;
+      const style = (req.query.style as 'brief' | 'detailed') || 'brief';
+
+      const result = await this.chatSummarizationService.getSummarizedContext(id, {
+        maxMessagesToKeep,
+        style,
+      });
+
+      res.status(200).json(result);
+    } catch (error: any) {
+      console.error('Get summarized context error:', error);
+
+      if (error.name === 'ZodError') {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid chat session ID',
           details: error.issues,
         });
       }

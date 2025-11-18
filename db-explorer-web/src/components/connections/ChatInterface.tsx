@@ -23,6 +23,8 @@ import { buildSystemPrompt } from "@/utils/chatPrompts";
 import { v4 as uuidv4 } from "uuid";
 import { toast } from "sonner";
 import { createToolCallData } from "@/utils/sqlExtractor";
+import { getContextManager } from "@/utils/contextManager";
+import { ContextIndicator } from "./ContextIndicator";
 
 interface ChatInterfaceProps {
   connection: ConnectionWithRole;
@@ -110,22 +112,39 @@ export function ChatInterface({ connection, chatSessionId }: ChatInterfaceProps)
     const { clearMCPState } = useMCPStore.getState();
     clearMCPState(connection.id);
 
-    // Clear AI service history for a fresh start
-    const aiService = getAIService();
-    aiService.clearHistory();
-    console.log('[ChatInterface] Chat session changed, cleared MCP state and AI history');
+    const loadExistingChat = async () => {
+      if (chatSessionId) {
+        // Loading an existing chat from history
+        console.log('[ChatInterface] Loading existing chat:', chatSessionId);
+        await loadChatHistory(chatSessionId);
 
-    if (chatSessionId) {
-      // Loading an existing chat from history
-      console.log('[ChatInterface] Loading existing chat:', chatSessionId);
-      loadChatHistory(chatSessionId);
-      titleGeneratedRef.current = true; // Existing chat, title already generated
-    } else {
-      // Starting a new chat (no chatSessionId in URL)
-      console.log('[ChatInterface] Starting new chat view');
-      clearCurrentChat();
-      titleGeneratedRef.current = false; // New chat, title not generated yet
-    }
+        // Load chat history into AI service for context continuity
+        const { chatHistory: loadedHistory } = useMCPStore.getState();
+        if (loadedHistory && loadedHistory.length > 0) {
+          const aiService = getAIService();
+          const historyForAI = loadedHistory.map((msg) => ({
+            role: msg.role,
+            content: msg.content,
+          }));
+          aiService.loadHistoryFromMessages(historyForAI);
+          console.log('[ChatInterface] Loaded', loadedHistory.length, 'messages into AI context');
+        }
+
+        titleGeneratedRef.current = true; // Existing chat, title already generated
+      } else {
+        // Starting a new chat (no chatSessionId in URL)
+        console.log('[ChatInterface] Starting new chat view');
+
+        // Clear AI service history for a fresh start
+        const aiService = getAIService();
+        aiService.clearHistory();
+
+        clearCurrentChat();
+        titleGeneratedRef.current = false; // New chat, title not generated yet
+      }
+    };
+
+    loadExistingChat();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatSessionId, connection.id]); // Depend on chatSessionId changes
 
@@ -338,6 +357,10 @@ export function ChatInterface({ connection, chatSessionId }: ChatInterfaceProps)
   const hasMessages = chatHistory.length > 0 || streamingMessages.length > 0 || pendingPermissions.length > 0;
   const isResumingChat = chatSessionId && chatHistory.length > 0;
 
+  // Calculate context window status
+  const contextManager = getContextManager();
+  const contextWindow = contextManager.getContextWindow(chatHistory);
+
   return (
     <div className="flex flex-col h-full overflow-hidden bg-gradient-to-b from-background to-muted/20">
       {/* Header */}
@@ -356,6 +379,17 @@ export function ChatInterface({ connection, chatSessionId }: ChatInterfaceProps)
               </div>
             </div>
             <div className="flex items-center gap-2">
+              {/* Context Window Indicator */}
+              {chatHistory.length > 0 && (
+                <ContextIndicator
+                  percentageUsed={contextWindow.percentageUsed}
+                  totalTokens={contextWindow.totalTokens}
+                  maxTokens={contextManager.getConfig().maxTokens}
+                  messageCount={chatHistory.length}
+                />
+              )}
+
+              {/* MCP Connection Status */}
               {isMCPConnecting ? (
                 <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-yellow-100 dark:bg-yellow-900/30">
                   <Loader2 className="w-2.5 h-2.5 text-yellow-600 dark:text-yellow-400 animate-spin" />

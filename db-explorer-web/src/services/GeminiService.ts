@@ -573,6 +573,26 @@ export class GeminiService {
   }
 
   /**
+   * Load conversation history from chat messages
+   * Used when resuming an existing chat session
+   */
+  loadHistoryFromMessages(messages: Array<{ role: string; content: string }>): void {
+    this.conversationHistory = messages.map((msg) => ({
+      role: msg.role === 'user' ? 'user' : 'model',
+      parts: [{ text: msg.content }],
+    }));
+    console.log('[GeminiService] Loaded conversation history:', this.conversationHistory.length, 'messages');
+  }
+
+  /**
+   * Set conversation history directly
+   * Used for advanced context management (e.g., with summarization)
+   */
+  setHistory(history: Array<{ role: string; parts: any[] }>): void {
+    this.conversationHistory = [...history];
+  }
+
+  /**
    * Set system prompt for context
    */
   async sendMessageWithSystem(
