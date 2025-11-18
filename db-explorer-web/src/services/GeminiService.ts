@@ -322,7 +322,28 @@ export class GeminiService {
 
         if (chunkText) {
           fullResponse += chunkText;
-          onStream?.({ type: 'text', content: chunkText });
+
+          // Split large chunks into smaller pieces for smoother streaming UX
+          // The Gemini SDK sometimes returns large chunks (sentences/paragraphs)
+          // Breaking them down creates a more natural streaming experience
+          if (chunkText.length > 40) {
+            // Split by words to stream word-by-word
+            const words = chunkText.split(/(\s+)/); // Keep whitespace
+            for (const word of words) {
+              // Check abort signal during word streaming
+              if (signal?.aborted) {
+                return;
+              }
+              if (word) {
+                onStream?.({ type: 'text', content: word });
+                // Small delay between words for visual effect (5ms per word)
+                await new Promise(resolve => setTimeout(resolve, 5));
+              }
+            }
+          } else {
+            // Small chunks can be sent as-is
+            onStream?.({ type: 'text', content: chunkText });
+          }
         }
 
         // Check if Gemini wants to call more tools
@@ -633,7 +654,28 @@ export class GeminiService {
 
         if (chunkText) {
           fullResponse += chunkText;
-          onStream?.({ type: 'text', content: chunkText });
+
+          // Split large chunks into smaller pieces for smoother streaming UX
+          // The Gemini SDK sometimes returns large chunks (sentences/paragraphs)
+          // Breaking them down creates a more natural streaming experience
+          if (chunkText.length > 40) {
+            // Split by words to stream word-by-word
+            const words = chunkText.split(/(\s+)/); // Keep whitespace
+            for (const word of words) {
+              // Check abort signal during word streaming
+              if (signal?.aborted) {
+                return;
+              }
+              if (word) {
+                onStream?.({ type: 'text', content: word });
+                // Small delay between words for visual effect (5ms per word)
+                await new Promise(resolve => setTimeout(resolve, 5));
+              }
+            }
+          } else {
+            // Small chunks can be sent as-is
+            onStream?.({ type: 'text', content: chunkText });
+          }
         }
 
         // Check for function calls

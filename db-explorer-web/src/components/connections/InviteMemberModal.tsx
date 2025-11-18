@@ -270,7 +270,7 @@ export function InviteMemberModal({
             <DialogTitle>Invitation Created</DialogTitle>
             <DialogDescription>
               {hasSuccessful && (
-                <span className="text-green-600 font-medium">
+                <span className="text-green-600 dark:text-green-400 font-medium">
                   {successfulInvitations.length} invitation(s) created successfully
                 </span>
               )}
@@ -315,7 +315,7 @@ export function InviteMemberModal({
                           className="flex-shrink-0"
                         >
                           {copiedTokenIndex === index ? (
-                            <Check className="h-4 w-4 text-green-600" />
+                            <Check className="h-4 w-4 text-green-600 dark:text-green-400" />
                           ) : (
                             <Copy className="h-4 w-4" />
                           )}

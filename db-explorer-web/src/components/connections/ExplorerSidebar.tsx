@@ -22,25 +22,38 @@ import { SearchInput } from "@/components/ui/search-input";
 import { cn } from "@/utils/ui";
 import { toast } from "sonner";
 import { useConnectionExplorer } from "@/contexts/ConnectionExplorerContext";
+import { ChatHistoryList } from "./ChatHistoryList";
+import { useMCPStore } from "@/stores/useMCPStore";
 
 type SidebarView = "database" | "recents";
 
 interface ExplorerSidebarProps {
   initialConnectionId?: string;
   onNewChat?: () => void;
+  onSelectChat?: (chatSessionId: string) => void;
+  currentChatSessionId?: string | null;
 }
 
 const MIN_SIDEBAR_WIDTH = 240;
 const MAX_SIDEBAR_WIDTH = 600;
 const DEFAULT_SIDEBAR_WIDTH = 320;
 
-export function ExplorerSidebar({ initialConnectionId, onNewChat }: ExplorerSidebarProps) {
+export function ExplorerSidebar({
+  initialConnectionId,
+  onNewChat,
+  onSelectChat,
+  currentChatSessionId
+}: ExplorerSidebarProps) {
   const {
     selectedSchema,
     selectedTables,
     setSelectedSchema,
     toggleTable,
   } = useConnectionExplorer();
+
+  // Get the current chat session ID from the store
+  // We'll use this to exclude newly created sessions from the history when in "new chat" view
+  const currentChatSessionIdFromStore = useMCPStore((state) => state.currentChatSessionId);
 
   const [activeView, setActiveView] = useState<SidebarView>("database");
   const [tableFilter, setTableFilter] = useState("");
@@ -70,16 +83,53 @@ export function ExplorerSidebar({ initialConnectionId, onNewChat }: ExplorerSide
 
   // Reset schema selection when connection changes
   useEffect(() => {
-    setSelectedSchema(undefined);
+    // Try to load the last selected schema from localStorage
+    if (initialConnectionId) {
+      try {
+        const storageKey = `selected_schema_${initialConnectionId}`;
+        const savedSchema = localStorage.getItem(storageKey);
+        if (savedSchema) {
+          // We'll set this after schemas are loaded
+          // Just store it in a ref for now
+        } else {
+          setSelectedSchema(undefined);
+        }
+      } catch (error) {
+        console.error('Failed to load schema from localStorage:', error);
+        setSelectedSchema(undefined);
+      }
+    } else {
+      setSelectedSchema(undefined);
+    }
     setLoadedTables([]);
   }, [initialConnectionId, setSelectedSchema]);
 
-  // Auto-select schema if only one exists
+  // Auto-select schema: first try localStorage, then single schema, or keep current selection
   useEffect(() => {
-    if (schemasData && schemasData.length === 1 && !selectedSchema) {
+    if (!schemasData || !initialConnectionId) return;
+
+    // If a schema is already selected, keep it
+    if (selectedSchema) return;
+
+    try {
+      // Try to restore from localStorage
+      const storageKey = `selected_schema_${initialConnectionId}`;
+      const savedSchema = localStorage.getItem(storageKey);
+
+      if (savedSchema && schemasData.some(s => s.name === savedSchema)) {
+        // Restore the saved schema if it still exists
+        setSelectedSchema(savedSchema);
+        return;
+      }
+    } catch (error) {
+      console.error('Failed to load schema from localStorage:', error);
+    }
+
+    // Fallback: auto-select if only one schema exists
+    if (schemasData.length === 1) {
       setSelectedSchema(schemasData[0].name);
     }
-  }, [schemasData, selectedSchema, setSelectedSchema]);
+  }, [schemasData, selectedSchema, setSelectedSchema, initialConnectionId]);
 
   // Load tables when schema is selected
   useEffect(() => {
@@ -109,7 +159,14 @@ export function ExplorerSidebar({ initialConnectionId, onNewChat }: ExplorerSide
 
   const handleRefreshSchemas = async () => {
     await refetchSchemas();
-    toast.success("Schemas refreshed");
+
+    // Also refresh tables if a schema is selected
+    if (selectedSchema && initialConnectionId) {
+      await loadTables(initialConnectionId, selectedSchema);
+      toast.success("Schemas and tables refreshed");
+    } else {
+      toast.success("Schemas refreshed");
+    }
   };
 
   // Resize handlers
@@ -151,8 +208,18 @@ export function ExplorerSidebar({ initialConnectionId, onNewChat }: ExplorerSide
     // Use setTimeout to ensure Select portal closes before state updates
     setTimeout(() => {
       setSelectedSchema(schemaName);
+
+      // Save to localStorage
+      if (initialConnectionId) {
+        try {
+          const storageKey = `selected_schema_${initialConnectionId}`;
+          localStorage.setItem(storageKey, schemaName);
+        } catch (error) {
+          console.error('Failed to save schema to localStorage:', error);
+        }
+      }
     }, 0);
-  }, [setSelectedSchema]);
+  }, [setSelectedSchema, initialConnectionId]);
 
   const schemas = useMemo(() => {
     return schemasData || [];
@@ -345,16 +412,46 @@ export function ExplorerSidebar({ initialConnectionId, onNewChat }: ExplorerSide
 
       {/* Main Sidebar Content - Recents Tab */}
       {activeView === "recents" && (
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="p-4 border-b">
-            <h3 className="text-sm font-semibold">Recent Chats</h3>
+        <div className="flex-1 flex flex-col overflow-hidden" style={{ width: `${sidebarWidth}px` }}>
+          <div className="p-4 border-b flex items-center justify-between">
+            <h3 className="text-sm font-semibold">Chat History</h3>
+            {onNewChat && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8"
+                onClick={() => {
+                  onNewChat();
+                  setActiveView("database");
+                  toast.success("New chat session started");
+                }}
+                disabled={!initialConnectionId}
+                title="Start new chat"
+              >
+                <Plus className="w-4 h-4 mr-1" />
+                New
+              </Button>
+            )}
           </div>
-          <div className="flex-1 flex items-center justify-center p-8">
-            <div className="text-center text-sm text-muted-foreground">
-              <Clock className="w-8 h-8 mx-auto mb-2 opacity-50" />
-              <p>No recent chats</p>
-              <p className="text-xs mt-1">Chat history will appear here</p>
-            </div>
+          <div className="flex-1 overflow-y-auto">
+            {initialConnectionId && onSelectChat ? (
+              <ChatHistoryList
+                connectionId={initialConnectionId}
+                onSelectChat={onSelectChat}
+                currentChatSessionId={currentChatSessionId}
+                excludeSessionId={
+                  // If we're in "new chat" view (no chatId in URL), exclude the session created in the store
+                  currentChatSessionId === undefined ? currentChatSessionIdFromStore : null
+                }
+              />
+            ) : (
+              <div className="flex items-center justify-center p-8">
+                <div className="text-center text-sm text-muted-foreground">
+                  <Clock className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <p>No connection selected</p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

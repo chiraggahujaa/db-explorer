@@ -332,7 +332,7 @@ export function ConnectionModal({
             type="checkbox"
             id="ssl"
             {...register("ssl")}
-            className="rounded border-gray-300"
+            className="rounded border-input"
           />
           <Label htmlFor="ssl" className="cursor-pointer">
             Enable SSL

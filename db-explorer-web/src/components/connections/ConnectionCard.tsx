@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   DropdownMenu,
@@ -33,11 +33,6 @@ export function ConnectionCard({
   isShared = false,
 }: ConnectionCardProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const router = useRouter();
-
-  const handleCardClick = () => {
-    router.push(`/dashboard/connections/${connection.id}`);
-  };
 
   const getDbTypeLabel = (type: string) => {
     const labels: Record<string, string> = {
@@ -51,44 +46,53 @@ export function ConnectionCard({
 
   const getRoleBadgeColor = (role: string) => {
     const colors: Record<string, string> = {
-      owner: "bg-purple-100 text-purple-700",
-      admin: "bg-blue-100 text-blue-700",
-      developer: "bg-green-100 text-green-700",
-      tester: "bg-yellow-100 text-yellow-700",
-      viewer: "bg-gray-100 text-gray-700",
+      owner: "bg-purple-100 text-purple-700 dark:bg-purple-950/50 dark:text-purple-300 dark:border dark:border-purple-800/50",
+      admin: "bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300 dark:border dark:border-blue-800/50",
+      developer: "bg-green-100 text-green-700 dark:bg-green-950/50 dark:text-green-300 dark:border dark:border-green-800/50",
+      tester: "bg-yellow-100 text-yellow-700 dark:bg-yellow-950/50 dark:text-yellow-300 dark:border dark:border-yellow-800/50",
+      viewer: "bg-gray-100 text-gray-700 dark:bg-gray-800/50 dark:text-gray-300 dark:border dark:border-gray-700/50",
     };
-    return colors[role] || "bg-gray-100 text-gray-700";
+    return colors[role] || "bg-gray-100 text-gray-700 dark:bg-gray-800/50 dark:text-gray-300 dark:border dark:border-gray-700/50";
   };
 
   return (
-    <Card 
-      className="hover:shadow-md transition-shadow cursor-pointer group"
-      onClick={handleCardClick}
+    <Link
+      href={`/dashboard/connections/${connection.id}`}
+      className="block h-full"
+      onClick={() => console.log('[ConnectionCard] Link clicked for:', connection.id, connection.name)}
     >
+      <Card
+        className="hover:shadow-md transition-shadow cursor-pointer group h-full flex flex-col"
+      >
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between">
           <div className="flex items-start gap-3 flex-1">
-            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center flex-shrink-0">
+            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 dark:from-blue-600 dark:to-purple-700 flex items-center justify-center flex-shrink-0 shadow-sm">
               <Database className="w-5 h-5 text-white" />
             </div>
             <div className="flex-1 min-w-0">
               <CardTitle className="text-lg font-semibold truncate">
                 {connection.name}
               </CardTitle>
-              {connection.description && (
-                <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-                  {connection.description}
-                </p>
-              )}
+              <div className="h-10 mt-1">
+                {connection.description && (
+                  <p className="text-sm text-muted-foreground line-clamp-2">
+                    {connection.description}
+                  </p>
+                )}
+              </div>
             </div>
           </div>
           <DropdownMenu open={isMenuOpen} onOpenChange={setIsMenuOpen}>
-            <DropdownMenuTrigger asChild>
+            <DropdownMenuTrigger asChild onClick={(e) => e.preventDefault()}>
               <Button
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
-                onClick={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
               >
                 <MoreVertical className="h-4 w-4" />
                 <span className="sr-only">Open menu</span>
@@ -97,6 +101,7 @@ export function ConnectionCard({
             <DropdownMenuContent align="end" className="w-48">
               <DropdownMenuItem
                 onClick={(e) => {
+                  e.preventDefault();
                   e.stopPropagation();
                   onInvite(connection);
                   setIsMenuOpen(false);
@@ -107,6 +112,7 @@ export function ConnectionCard({
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={(e) => {
+                  e.preventDefault();
                   e.stopPropagation();
                   onEdit(connection);
                   setIsMenuOpen(false);
@@ -129,6 +135,7 @@ export function ConnectionCard({
                 <DropdownMenuItem
                   variant="destructive"
                   onClick={(e) => {
+                    e.preventDefault();
                     e.stopPropagation();
                     onRemove(connection);
                     setIsMenuOpen(false);
@@ -142,6 +149,7 @@ export function ConnectionCard({
                 <DropdownMenuItem
                   variant="destructive"
                   onClick={(e) => {
+                    e.preventDefault();
                     e.stopPropagation();
                     onDelete(connection);
                     setIsMenuOpen(false);
@@ -157,7 +165,7 @@ export function ConnectionCard({
       </CardHeader>
       <CardContent className="pt-0">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/50 dark:text-blue-300 dark:border-blue-800/50">
             {getDbTypeLabel(connection.dbType)}
           </span>
           <span
@@ -168,13 +176,14 @@ export function ConnectionCard({
             {connection.userRole.charAt(0).toUpperCase() + connection.userRole.slice(1)}
           </span>
           {!connection.isActive && (
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-800/50 dark:text-gray-400 dark:border dark:border-gray-700/50">
               Inactive
             </span>
           )}
         </div>
       </CardContent>
     </Card>
+    </Link>
   );
 }
 

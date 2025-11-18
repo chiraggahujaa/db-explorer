@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { QueryProvider } from "@/providers/QueryProvider";
+import { ThemeProvider } from "@/providers/ThemeProvider";
 import { RootAuthGuard } from "@/features/auth/components/RootAuthGuard";
 import "./globals.css";
 import { Toaster } from "sonner";
@@ -26,17 +27,18 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    // TODO: Find better solution - overflow-hidden prevents body scroll when chat tool calls expand
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning className="h-full">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased h-full overflow-hidden`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased h-full`}
       >
-        <QueryProvider>
-          <RootAuthGuard>
-            {children}
-          </RootAuthGuard>
-          <Toaster position="bottom-right" />
-        </QueryProvider>
+        <ThemeProvider>
+          <QueryProvider>
+            <RootAuthGuard>
+              {children}
+            </RootAuthGuard>
+            <Toaster position="bottom-right" />
+          </QueryProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

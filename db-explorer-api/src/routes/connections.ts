@@ -3,11 +3,13 @@
 import express from 'express';
 import { ConnectionController } from '../controllers/ConnectionController.js';
 import { SchemaTrainingController } from '../controllers/SchemaTrainingController.js';
+import { ChatSessionController } from '../controllers/ChatSessionController.js';
 import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
 const connectionController = new ConnectionController();
 const schemaTrainingController = new SchemaTrainingController();
+const chatSessionController = new ChatSessionController();
 
 // All routes require authentication
 router.use(authenticateToken);
@@ -51,5 +53,8 @@ router.get('/:id/tables', connectionController.getTables.bind(connectionControll
 router.post('/:id/train-schema', schemaTrainingController.trainSchema.bind(schemaTrainingController));
 router.get('/:id/schema-cache', schemaTrainingController.getSchemaCache.bind(schemaTrainingController));
 router.delete('/:id/schema-cache', schemaTrainingController.deleteSchemaCache.bind(schemaTrainingController));
+
+// Chat sessions for a connection
+router.get('/:connectionId/chat-sessions', chatSessionController.getChatSessionsByConnection.bind(chatSessionController));
 
 export default router;

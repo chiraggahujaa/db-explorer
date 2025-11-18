@@ -70,21 +70,21 @@ export function SearchableSelect({
           role="combobox"
           aria-expanded={open}
           className={cn(
-            "w-full justify-between h-9",
+            "w-[160px] justify-between h-9",
             !selectedOption && "text-muted-foreground",
             triggerClassName
           )}
           disabled={disabled}
         >
           {selectedOption ? (
-            <div className="flex items-center gap-2 flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-1 min-w-0 overflow-hidden">
               {selectedOption.icon && (
                 <span className="shrink-0">{selectedOption.icon}</span>
               )}
-              <span className="truncate">{selectedOption.label}</span>
+              <span className="truncate flex-1">{selectedOption.label}</span>
             </div>
           ) : (
-            <span className="text-muted-foreground">{placeholder}</span>
+            <span className="text-muted-foreground truncate">{placeholder}</span>
           )}
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
@@ -113,17 +113,14 @@ export function SearchableSelect({
                       key={option.value}
                       value={option.value}
                       onSelect={handleSelect}
-                      className="!pl-0 pr-3 py-2 m-0"
-                      style={{ paddingLeft: 0 }}
+                      className="!pl-2 pr-3 py-2 m-0"
+                      style={{ paddingLeft: '0.5rem' }}
                     >
                       <div className={cn(
                         "w-1 h-4 shrink-0 mr-2 rounded-sm transition-colors",
                         value === option.value ? "bg-foreground/60" : "bg-transparent"
                       )} />
-                      {option.icon && (
-                        <span className="mr-2 shrink-0">{option.icon}</span>
-                      )}
-                      <span className="flex-1">{option.label}</span>
+                      <span className="flex-1 truncate">{option.label}</span>
                     </CommandItem>
                   ))}
                 </CommandGroup>

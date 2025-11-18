@@ -8,6 +8,7 @@ import userRoutes from './routes/users.js';
 import fileRoutes from './routes/files.js';
 import connectionRoutes from './routes/connections.js';
 import invitationRoutes from './routes/invitations.js';
+import chatSessionRoutes from './routes/chatSessions.js';
 
 // Import middleware
 import {
@@ -86,6 +87,7 @@ app.use('/api/users', apiRateLimit, userRoutes);
 app.use('/api/files', uploadRateLimit, fileRoutes);
 app.use('/api/connections', apiRateLimit, connectionRoutes);
 app.use('/api/invitations', apiRateLimit, invitationRoutes);
+app.use('/api/chat-sessions', apiRateLimit, chatSessionRoutes);
 
 // 404 handler - must be after all routes
 app.use((req: Request, res: Response) => {

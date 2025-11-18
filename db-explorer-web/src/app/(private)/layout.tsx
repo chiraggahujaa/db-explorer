@@ -6,10 +6,11 @@ export default function PrivateLayout({
   children: React.ReactNode;
 }) {
   return (
-    <>
+    <div className="h-full flex flex-col overflow-hidden">
       <Header />
-      <div className="h-16" />
-      {children}
-    </>
+      <main className="flex-1 min-h-0 pt-16 overflow-y-auto">
+        {children}
+      </main>
+    </div>
   );
 }

@@ -44,6 +44,16 @@ bun run start
 - **Forms**: React Hook Form + Zod
 - **Chat Access**: MCP server for natural language database queries
 
+## Dark Mode
+
+The application includes a comprehensive dark mode implementation with automatic browser storage persistence.
+
+- **Documentation**: See [db-explorer-web/DARK_MODE.md](./db-explorer-web/DARK_MODE.md) for complete implementation details
+- **Toggle Component**: Available in the header (`ThemeToggle`)
+- **Usage**: All components support `dark:` variants using semantic color tokens
+- **Persistence**: Theme preferences automatically saved to localStorage
+- **System Preference**: Respects OS dark mode setting
+
 ## Reusable Components
 
 The project includes reusable UI components that should be used throughout the application:
@@ -51,5 +61,7 @@ The project includes reusable UI components that should be used throughout the a
 - **SearchableSelect** (`db-explorer-web/src/components/ui/searchable-select.tsx`): A searchable combobox for selecting from lists with search functionality. Use for dropdowns that need search (e.g., schema selection, connection selection).
 
 - **SearchInput** (`db-explorer-web/src/components/ui/search-input.tsx`): A search input component with optional icon support. Use for text search/filter inputs (e.g., table filtering, record searching).
+
+- **ThemeToggle** (`db-explorer-web/src/components/theme/ThemeToggle.tsx`): A theme switcher component for light/dark/system modes. Located in the header for easy access.
 
 See `db-explorer-web/CLAUDE.md` for detailed usage examples and API documentation.
