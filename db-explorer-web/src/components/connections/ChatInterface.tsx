@@ -69,7 +69,7 @@ function CollapsibleMessage({ content, maxLines = 3 }: { content: string; maxLin
 export function ChatInterface({ connection, chatSessionId }: ChatInterfaceProps) {
   const [message, setMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const currentMessageIdRef = useRef<string | null>(null);
   const titleGeneratedRef = useRef<boolean>(false);
@@ -142,8 +142,10 @@ export function ChatInterface({ connection, chatSessionId }: ChatInterfaceProps)
 
   // Auto-scroll to bottom when new messages or MCP events arrive
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [streamingMessages, pendingPermissions]);
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+    }
+  }, [streamingMessages, pendingPermissions, chatHistory]);
 
   const handleStop = () => {
     if (abortControllerRef.current && currentMessageIdRef.current) {
@@ -340,33 +342,33 @@ export function ChatInterface({ connection, chatSessionId }: ChatInterfaceProps)
     <div className="flex flex-col h-full overflow-hidden bg-gradient-to-b from-background to-muted/20">
       {/* Header */}
       <div className="flex-shrink-0 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container max-w-4xl mx-auto px-4 py-4">
+        <div className="container max-w-4xl mx-auto px-4 py-2">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center justify-center w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600">
-                <Database className="w-5 h-5 text-white" />
+            <div className="flex items-center gap-2">
+              <div className="flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600">
+                <Database className="w-4 h-4 text-white" />
               </div>
               <div>
-                <h1 className="text-lg font-semibold">{connection.name}</h1>
+                <h1 className="text-base font-semibold">{connection.name}</h1>
                 {connection.description && (
-                  <p className="text-sm text-muted-foreground">{connection.description}</p>
+                  <p className="text-xs text-muted-foreground">{connection.description}</p>
                 )}
               </div>
             </div>
             <div className="flex items-center gap-2">
               {isMCPConnecting ? (
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-yellow-100 dark:bg-yellow-900/30">
-                  <Loader2 className="w-3 h-3 text-yellow-600 animate-spin" />
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-yellow-100 dark:bg-yellow-900/30">
+                  <Loader2 className="w-2.5 h-2.5 text-yellow-600 dark:text-yellow-400 animate-spin" />
                   <span className="text-xs font-medium text-yellow-700 dark:text-yellow-400">Connecting...</span>
                 </div>
               ) : isMCPConnected ? (
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-green-100 dark:bg-green-900/30">
-                  <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-100 dark:bg-green-900/30">
+                  <div className="w-1.5 h-1.5 rounded-full bg-green-500 dark:bg-green-400 animate-pulse" />
                   <span className="text-xs font-medium text-green-700 dark:text-green-400">Connected</span>
                 </div>
               ) : (
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-red-100 dark:bg-red-900/30">
-                  <div className="w-2 h-2 rounded-full bg-red-500" />
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-100 dark:bg-red-900/30">
+                  <div className="w-1.5 h-1.5 rounded-full bg-red-500 dark:bg-red-400" />
                   <span className="text-xs font-medium text-red-700 dark:text-red-400">Disconnected</span>
                 </div>
               )}
@@ -376,24 +378,24 @@ export function ChatInterface({ connection, chatSessionId }: ChatInterfaceProps)
       </div>
 
       {/* Chat Content Area - Scrollable */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0">
-        <div className="container max-w-4xl mx-auto px-2 py-6">
-          {!hasMessages ? (
-            // Welcome Screen
-            <div className="flex flex-col items-center justify-center h-full min-h-[400px] text-center">
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto overflow-x-hidden min-h-0">
+        {!hasMessages ? (
+          // Welcome Screen - centered in full available height
+          <div className="h-full flex flex-col items-center justify-center">
+            <div className="container max-w-4xl mx-auto px-2 py-6 text-center">
               <div className="mb-6">
-                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 mb-4">
+                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 dark:from-blue-600 dark:to-purple-700 mb-4 shadow-lg">
                   <Sparkles className="w-8 h-8 text-white" />
                 </div>
               </div>
-              <h2 className="text-3xl font-bold mb-3 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+              <h2 className="text-3xl font-bold mb-3 bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-400 dark:to-purple-400 bg-clip-text text-transparent">
                 Ask me anything about your database
               </h2>
               <p className="text-muted-foreground max-w-md mb-8">
                 I can help you explore schemas, query data, analyze tables, and more.
                 Just ask in natural language or write SQL directly.
               </p>
-              
+
               {/* Example Prompts */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-2xl">
                 <button
@@ -426,8 +428,10 @@ export function ChatInterface({ connection, chatSessionId }: ChatInterfaceProps)
                 </button>
               </div>
             </div>
-          ) : (
-            // Messages
+          </div>
+        ) : (
+          // Messages
+          <div className="container max-w-4xl mx-auto px-2 py-6">
             <div className="space-y-6 py-4">
               {/* Show context summary when resuming a chat */}
               {isResumingChat && (
@@ -448,7 +452,7 @@ export function ChatInterface({ connection, chatSessionId }: ChatInterfaceProps)
                     // AI Response
                     <div className="flex gap-3 mb-4">
                       <div className="flex-shrink-0">
-                        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600">
+                        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 dark:from-blue-600 dark:to-purple-700 shadow-sm">
                           <Sparkles className="w-4 h-4 text-white" />
                         </div>
                       </div>
@@ -502,7 +506,7 @@ export function ChatInterface({ connection, chatSessionId }: ChatInterfaceProps)
               {pendingPermissions.map((perm) => (
                 <div key={perm.messageId} className="flex gap-3">
                   <div className="flex-shrink-0">
-                    <div className="flex items-center justify-center w-8 h-8 rounded-full bg-yellow-500">
+                    <div className="flex items-center justify-center w-8 h-8 rounded-full bg-yellow-500 dark:bg-yellow-600 shadow-sm">
                       <Sparkles className="w-4 h-4 text-white" />
                     </div>
                   </div>
@@ -515,11 +519,9 @@ export function ChatInterface({ connection, chatSessionId }: ChatInterfaceProps)
                   </div>
                 </div>
               ))}
-
-              <div ref={messagesEndRef} />
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Chat Input */}
@@ -553,7 +555,7 @@ export function ChatInterface({ connection, chatSessionId }: ChatInterfaceProps)
                 type="button"
                 size="lg"
                 onClick={handleStop}
-                className="rounded-full w-12 h-12 p-0 bg-red-500 hover:bg-red-600 text-white"
+                className="rounded-full w-12 h-12 p-0 bg-red-500 hover:bg-red-600 dark:bg-red-600 dark:hover:bg-red-700 text-white shadow-lg"
               >
                 <Square className="w-5 h-5" />
                 <span className="sr-only">Stop</span>

@@ -4,7 +4,7 @@ export default function ConnectionLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="h-[calc(100vh-4rem)] overflow-hidden">
+    <div className="h-full overflow-hidden">
       {children}
     </div>
   );

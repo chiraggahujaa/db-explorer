@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ChevronDown, LayoutDashboard } from "lucide-react";
+import { ThemeToggle } from "@/components/theme/ThemeToggle";
 
 export default function Header() {
   const { user, isAuthenticated, logout } = useAuth();
@@ -63,6 +64,7 @@ export default function Header() {
 
           {/* Right: Auth */}
           <div className="flex items-center gap-1 sm:gap-2">
+            <ThemeToggle />
             {isAuthenticated && (
               <Link href="/dashboard">
                 <Button variant="ghost" size="icon" aria-label="Dashboard">
