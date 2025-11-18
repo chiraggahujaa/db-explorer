@@ -9,6 +9,7 @@ import { ConnectionModal } from "@/components/connections/ConnectionModal";
 import { DeleteConnectionModal } from "@/components/connections/DeleteConnectionModal";
 import { InviteMemberModal } from "@/components/connections/InviteMemberModal";
 import { AcceptInvitationModal } from "@/components/connections/AcceptInvitationModal";
+import { RetrainSchemaModal } from "@/components/connections/RetrainSchemaModal";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -30,6 +31,7 @@ export default function DashboardPage() {
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [isAcceptModalOpen, setIsAcceptModalOpen] = useState(false);
   const [isRemoveSharedOpen, setIsRemoveSharedOpen] = useState(false);
+  const [isRetrainModalOpen, setIsRetrainModalOpen] = useState(false);
   const [selectedConnection, setSelectedConnection] =
     useState<ConnectionWithRole | null>(null);
   const queryClient = useQueryClient();
@@ -63,6 +65,11 @@ export default function DashboardPage() {
   const handleInvite = (connection: ConnectionWithRole) => {
     setSelectedConnection(connection);
     setIsInviteModalOpen(true);
+  };
+
+  const handleRetrain = (connection: ConnectionWithRole) => {
+    setSelectedConnection(connection);
+    setIsRetrainModalOpen(true);
   };
 
   const handleRemoveShared = (connection: ConnectionWithRole) => {
@@ -165,6 +172,7 @@ export default function DashboardPage() {
                 onEdit={handleEdit}
                 onDelete={handleDelete}
                 onInvite={handleInvite}
+                onRetrain={handleRetrain}
               />
             ))}
           </div>
@@ -188,6 +196,7 @@ export default function DashboardPage() {
                 onEdit={handleEdit}
                 onDelete={handleDelete}
                 onInvite={handleInvite}
+                onRetrain={handleRetrain}
                 onRemove={handleRemoveShared}
                 isShared={true}
               />
@@ -228,6 +237,13 @@ export default function DashboardPage() {
       <AcceptInvitationModal
         open={isAcceptModalOpen}
         onOpenChange={setIsAcceptModalOpen}
+        onSuccess={handleSuccess}
+      />
+
+      <RetrainSchemaModal
+        open={isRetrainModalOpen}
+        onOpenChange={setIsRetrainModalOpen}
+        connection={selectedConnection}
         onSuccess={handleSuccess}
       />
 

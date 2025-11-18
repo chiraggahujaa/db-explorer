@@ -23,7 +23,8 @@
       "Bash(/tmp/all_staged.patch)",
       "Bash(/tmp/all_unstaged.patch)",
       "Bash(git add:*)",
-      "Bash(test:*)"
+      "Bash(test:*)",
+      "Bash(cd /Users/chiragahuja/Desktop/db-explorer-2/db-explorer-api && npx eslint:*)"
     ],
     "deny": [],
     "ask": []

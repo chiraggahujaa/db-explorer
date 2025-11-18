@@ -10,7 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { MoreVertical, Edit, Trash2, UserPlus, Database, X } from "lucide-react";
+import { MoreVertical, Edit, Trash2, UserPlus, Database, X, RefreshCw } from "lucide-react";
 import type { ConnectionWithRole } from "@/types/connection";
 
 interface ConnectionCardProps {
@@ -18,6 +18,7 @@ interface ConnectionCardProps {
   onEdit: (connection: ConnectionWithRole) => void;
   onDelete: (connection: ConnectionWithRole) => void;
   onInvite: (connection: ConnectionWithRole) => void;
+  onRetrain: (connection: ConnectionWithRole) => void;
   onRemove?: (connection: ConnectionWithRole) => void;
   isShared?: boolean;
 }
@@ -27,6 +28,7 @@ export function ConnectionCard({
   onEdit,
   onDelete,
   onInvite,
+  onRetrain,
   onRemove,
   isShared = false,
 }: ConnectionCardProps) {
@@ -118,6 +120,16 @@ export function ConnectionCard({
               >
                 <Edit className="mr-2 h-4 w-4" />
                 Edit
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRetrain(connection);
+                  setIsMenuOpen(false);
+                }}
+              >
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Re-train Schema
               </DropdownMenuItem>
               {isShared && onRemove && connection.userRole !== "owner" && (
                 <DropdownMenuItem

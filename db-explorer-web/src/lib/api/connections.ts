@@ -175,3 +175,43 @@ export const databaseExplorerAPI = {
     return res.data;
   },
 };
+
+export interface TrainSchemaRequest {
+  force?: boolean;
+}
+
+export interface TrainSchemaResponse {
+  success: boolean;
+  status: 'pending' | 'training' | 'completed' | 'failed';
+  message: string;
+  cache?: any;
+}
+
+export interface SchemaCacheResponse {
+  success: boolean;
+  data?: any;
+  error?: string;
+}
+
+export const schemaTrainingAPI = {
+  // Train schema for a connection
+  trainSchema: async (
+    connectionId: string,
+    force: boolean = false
+  ): Promise<TrainSchemaResponse> => {
+    const res = await api.post(`/api/connections/${connectionId}/train-schema`, { force });
+    return res.data;
+  },
+
+  // Get schema cache status
+  getSchemaCache: async (connectionId: string): Promise<SchemaCacheResponse> => {
+    const res = await api.get(`/api/connections/${connectionId}/schema-cache`);
+    return res.data;
+  },
+
+  // Delete schema cache
+  deleteSchemaCache: async (connectionId: string): Promise<ActionResponse> => {
+    const res = await api.delete(`/api/connections/${connectionId}/schema-cache`);
+    return res.data;
+  },
+};

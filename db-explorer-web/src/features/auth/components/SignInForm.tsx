@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useTheme } from 'next-themes';
 import { useAuth } from '../hooks/useAuth';
 import type { SignInFormData, ForgotPasswordFormData } from '@/types/forms';
 import { loginSchema, forgotPasswordSchema } from '../validations';
@@ -20,10 +21,11 @@ import { toast } from 'sonner';
 export function SignInForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
-  const { 
-    login, 
-    resetPassword, 
-    isLoggingIn, 
+  const { theme } = useTheme();
+  const {
+    login,
+    resetPassword,
+    isLoggingIn,
     isResettingPassword
   } = useAuth();
 
@@ -219,11 +221,14 @@ export function SignInForm() {
 
               <div className="flex flex-col gap-3 items-center">
                 {googleClientId ? (
-                  <GoogleLogin
-                    onSuccess={(cred) => cred.credential && handleGoogleCredential(cred.credential)}
-                    onError={handleGoogleError}
-                    useOneTap
-                  />
+                  <div style={{ colorScheme: 'light' }}>
+                    <GoogleLogin
+                      onSuccess={(cred) => cred.credential && handleGoogleCredential(cred.credential)}
+                      onError={handleGoogleError}
+                      useOneTap
+                      theme={theme === 'dark' ? 'filled_black' : 'outline'}
+                    />
+                  </div>
                 ) : (
                   <div className="text-sm text-muted-foreground p-2">
                     Google Sign-In is not configured

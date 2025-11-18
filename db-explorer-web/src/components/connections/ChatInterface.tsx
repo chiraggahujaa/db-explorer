@@ -2,7 +2,7 @@
 
 import { useState, FormEvent, useEffect, useRef } from "react";
 import { flushSync } from "react-dom";
-import { Send, Sparkles, Database, Loader2, Square, ChevronDown, ChevronUp } from "lucide-react";
+import { Send, Sparkles, Database, Loader2, Square, RefreshCw, ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import type { ConnectionWithRole } from "@/types/connection";
@@ -15,6 +15,7 @@ import {
 import { useMCPStore } from "@/stores/useMCPStore";
 import { StreamingMessage } from "./StreamingMessage";
 import { PermissionDialog } from "./PermissionDialog";
+import { RetrainSchemaModal } from "./RetrainSchemaModal";
 import { ChatContextSummary } from "./ChatContextSummary";
 import { MessageMarkdown } from "./MessageMarkdown";
 import { useConnectionExplorer } from "@/contexts/ConnectionExplorerContext";
@@ -23,6 +24,7 @@ import { buildSystemPrompt } from "@/utils/chatPrompts";
 import { v4 as uuidv4 } from "uuid";
 import { toast } from "sonner";
 import { createToolCallData } from "@/utils/sqlExtractor";
+import { useQueryClient } from "@tanstack/react-query";
 import { getContextManager } from "@/utils/contextManager";
 import { ContextIndicator } from "./ContextIndicator";
 
@@ -71,10 +73,13 @@ function CollapsibleMessage({ content, maxLines = 3 }: { content: string; maxLin
 export function ChatInterface({ connection, chatSessionId }: ChatInterfaceProps) {
   const [message, setMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isRetrainModalOpen, setIsRetrainModalOpen] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const currentMessageIdRef = useRef<string | null>(null);
   const titleGeneratedRef = useRef<boolean>(false);
+  const queryClient = useQueryClient();
 
   // Get sidebar selection context
   const { selectedSchema, selectedTables } = useConnectionExplorer();
@@ -379,6 +384,17 @@ export function ChatInterface({ connection, chatSessionId }: ChatInterfaceProps)
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsRetrainModalOpen(true)}
+                disabled={!isMCPConnected}
+                title="Re-train schema cache for AI understanding"
+                className="gap-2"
+              >
+                <RefreshCw className="w-4 h-4" />
+                <span className="hidden sm:inline">Re-train Schema</span>
+              </Button>
               {/* Context Window Indicator */}
               {chatHistory.length > 0 && (
                 <ContextIndicator
@@ -612,6 +628,17 @@ export function ChatInterface({ connection, chatSessionId }: ChatInterfaceProps)
           </p>
         </div>
       </div>
+
+      {/* Retrain Schema Modal */}
+      <RetrainSchemaModal
+        open={isRetrainModalOpen}
+        onOpenChange={setIsRetrainModalOpen}
+        connection={connection}
+        onSuccess={() => {
+          // Invalidate schema cache query
+          queryClient.invalidateQueries({ queryKey: ["connection", connection.id] });
+        }}
+      />
     </div>
   );
 }

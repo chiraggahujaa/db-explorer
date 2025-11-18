@@ -5,6 +5,7 @@ import { ConnectionService } from '../services/ConnectionService.js';
 import { InvitationService } from '../services/InvitationService.js';
 import { EmailService } from '../services/EmailService.js';
 import { DatabaseExplorerService } from '../services/DatabaseExplorerService.js';
+import { SchemaTrainingService } from '../services/SchemaTrainingService.js';
 import {
   createConnectionSchema,
   updateConnectionSchema,
@@ -17,11 +18,13 @@ export class ConnectionController {
   private connectionService: ConnectionService;
   private invitationService: InvitationService;
   private databaseExplorerService: DatabaseExplorerService;
+  private schemaTrainingService: SchemaTrainingService;
 
   constructor() {
     this.connectionService = new ConnectionService();
     this.invitationService = new InvitationService();
     this.databaseExplorerService = new DatabaseExplorerService();
+    this.schemaTrainingService = new SchemaTrainingService();
   }
 
   /**
@@ -161,6 +164,17 @@ export class ConnectionController {
 
       const validatedData = createConnectionSchema.parse(req.body);
       const result = await this.connectionService.createConnection(userId, validatedData);
+
+      // Trigger schema training asynchronously (don't wait for it to complete)
+      if (result.success && result.data?.id) {
+        this.schemaTrainingService.trainSchema(result.data.id, userId, false)
+          .then(() => {
+            console.log(`Schema training completed for connection ${result.data.id}`);
+          })
+          .catch((error) => {
+            console.error(`Schema training failed for connection ${result.data.id}:`, error);
+          });
+      }
 
       res.status(201).json(result);
     } catch (error: any) {
