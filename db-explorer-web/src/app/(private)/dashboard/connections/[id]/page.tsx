@@ -6,7 +6,7 @@ import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { connectionsAPI } from "@/lib/api/connections";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
 import { ExplorerSidebar } from "@/components/connections/ExplorerSidebar";
-import { ChatInterface } from "@/components/connections/ChatInterface";
+import { ChatInterfaceNew as ChatInterface } from "@/components/connections/ChatInterfaceNew";
 import { ConnectionExplorerProvider } from "@/contexts/ConnectionExplorerContext";
 import { getClaudeService } from "@/services/ClaudeService";
 import { useMCPStore } from "@/stores/useMCPStore";
