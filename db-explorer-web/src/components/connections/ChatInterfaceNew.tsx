@@ -1,27 +1,67 @@
 /**
- * New Chat Interface using Vercel AI SDK
- * Replaces MCP-based architecture with direct AI SDK streaming
+ * Chat Interface using Vercel AI SDK with Original UI Style
+ * Combines new backend with beloved original UI
  */
 
 "use client";
 
 import { useState, useEffect, useRef, FormEvent } from "react";
 import { useChat } from "ai/react";
-import { Send, Sparkles, Database, Loader2, Square, RefreshCw } from "lucide-react";
+import { Send, Sparkles, Database, Loader2, Square, RefreshCw, ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import type { ConnectionWithRole } from "@/types/connection";
 import { MessageMarkdown } from "./MessageMarkdown";
 import { RetrainSchemaModal } from "./RetrainSchemaModal";
+import { ChatContextSummary } from "./ChatContextSummary";
+import { ContextIndicator } from "./ContextIndicator";
 import { useMCPStore } from "@/stores/useMCPStore";
 import { useConnectionExplorer } from "@/contexts/ConnectionExplorerContext";
 import { toast } from "sonner";
 import { v4 as uuidv4 } from "uuid";
 import { cn } from "@/utils/ui";
+import { getContextManager } from "@/utils/contextManager";
 
 interface ChatInterfaceNewProps {
   connection: ConnectionWithRole;
   chatSessionId?: string;
+}
+
+// Collapsible message component for long user messages
+function CollapsibleMessage({ content, maxLines = 3 }: { content: string; maxLines?: number }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const lines = content.split('\n');
+  const shouldCollapse = lines.length > maxLines || content.length > 200;
+
+  if (!shouldCollapse) {
+    return <p className="text-sm whitespace-pre-wrap break-words">{content}</p>;
+  }
+
+  const previewContent = isExpanded
+    ? content
+    : lines.slice(0, maxLines).join('\n') + (lines.length > maxLines ? '...' : '');
+
+  return (
+    <div className="space-y-2">
+      <p className="text-sm whitespace-pre-wrap break-words">{previewContent}</p>
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="flex items-center gap-1 text-xs text-primary-foreground/80 hover:text-primary-foreground transition-colors"
+      >
+        {isExpanded ? (
+          <>
+            <ChevronUp className="w-3 h-3" />
+            Show less
+          </>
+        ) : (
+          <>
+            <ChevronDown className="w-3 h-3" />
+            Show more
+          </>
+        )}
+      </button>
+    </div>
+  );
 }
 
 export function ChatInterfaceNew({ connection, chatSessionId }: ChatInterfaceNewProps) {
@@ -29,6 +69,7 @@ export function ChatInterfaceNew({ connection, chatSessionId }: ChatInterfaceNew
   const [schemaError, setSchemaError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const titleGeneratedRef = useRef<boolean>(false);
 
   // Get sidebar selection context
   const { selectedSchema, selectedTables } = useConnectionExplorer();
@@ -45,28 +86,32 @@ export function ChatInterfaceNew({ connection, chatSessionId }: ChatInterfaceNew
     clearCurrentChat,
   } = useMCPStore();
 
+  // Calculate context window status
+  const contextManager = getContextManager();
+  const contextWindow = contextManager.getContextWindow(chatHistory);
+
   // Use Vercel AI SDK's useChat hook
   const {
     messages,
     input,
+    setInput,
     handleInputChange,
     handleSubmit: handleChatSubmit,
     isLoading,
     error,
     stop,
-    reload,
     setMessages,
   } = useChat({
     api: '/api/chat',
     body: {
       connectionId: connection.id,
-      userId: connection.userId || connection.owner_id,
+      userId: connection.userId || connection.owner_id || connection.ownerId,
     },
     onError: (error) => {
       console.error('[ChatInterface] Error:', error);
 
       // Check if it's a schema training error
-      if (error.message.includes('Schema not trained')) {
+      if (error.message.includes('Schema not trained') || error.message.includes('needsTraining')) {
         setSchemaError('Schema not trained. Please train the schema first.');
         toast.error('Schema not trained', {
           description: 'Please train the database schema to enable AI chat.',
@@ -86,19 +131,26 @@ export function ChatInterfaceNew({ connection, chatSessionId }: ChatInterfaceNew
 
       // Save to chat history
       if (currentChatSessionId) {
-        await saveChatMessages(currentChatSessionId, [
-          ...messages,
-          message
-        ].map(m => ({
-          id: uuidv4(),
+        // Get all messages including the new one
+        const allMessages = [...messages, message];
+
+        // Convert to chat history format
+        const historyMessages = allMessages.map((m: any) => ({
+          id: m.id || uuidv4(),
           role: m.role as 'user' | 'assistant',
           content: m.content,
           timestamp: new Date().toISOString(),
-        })));
+        }));
+
+        await saveChatMessages(currentChatSessionId, historyMessages);
 
         // Generate title for first message if needed
-        if (messages.length === 1 && !currentChatSession?.title) {
-          await generateChatTitle(currentChatSessionId, messages[0].content);
+        if (!titleGeneratedRef.current && allMessages.length === 2) { // user + assistant
+          const userMessage = allMessages.find((m: any) => m.role === 'user');
+          if (userMessage) {
+            await generateChatTitle(currentChatSessionId, userMessage.content);
+            titleGeneratedRef.current = true;
+          }
         }
       }
     },
@@ -119,11 +171,13 @@ export function ChatInterfaceNew({ connection, chatSessionId }: ChatInterfaceNew
             role: msg.role,
             content: msg.content,
           })));
+          titleGeneratedRef.current = true;
         }
       } else {
         console.log('[ChatInterface] Starting new chat');
         clearCurrentChat();
         setMessages([]);
+        titleGeneratedRef.current = false;
       }
     };
 
@@ -136,12 +190,13 @@ export function ChatInterfaceNew({ connection, chatSessionId }: ChatInterfaceNew
     if (scrollContainerRef.current) {
       scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
     }
-  }, [messages]);
+  }, [messages, isLoading]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
 
-    if (!input.trim() || isLoading) {
+    const messageToSend = input?.trim();
+    if (!messageToSend || isLoading) {
       return;
     }
 
@@ -171,175 +226,260 @@ export function ChatInterfaceNew({ connection, chatSessionId }: ChatInterfaceNew
     }
   };
 
+  const handleExampleClick = (exampleText: string) => {
+    setInput(exampleText);
+  };
+
+  const hasMessages = messages.length > 0;
+  const isResumingChat = chatSessionId && chatHistory.length > 0;
+
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full overflow-hidden bg-gradient-to-b from-background to-muted/20">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border/50 bg-card/50 backdrop-blur-sm">
-        <div className="flex items-center gap-2">
-          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary/10">
-            <Sparkles className="w-4 h-4 text-primary" />
-          </div>
-          <div>
-            <h2 className="text-sm font-semibold">AI Assistant</h2>
-            <p className="text-xs text-muted-foreground">
-              Ask questions about your database
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          {/* Schema status */}
-          {selectedSchema && (
-            <div className="flex items-center gap-1 px-2 py-1 text-xs rounded-md bg-primary/10 text-primary">
-              <Database className="w-3 h-3" />
-              <span>{selectedSchema}</span>
+      <div className="flex-shrink-0 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="container max-w-4xl mx-auto px-4 py-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600">
+                <Database className="w-4 h-4 text-white" />
+              </div>
+              <div>
+                <h1 className="text-base font-semibold">{connection.name}</h1>
+                {connection.description && (
+                  <p className="text-xs text-muted-foreground">{connection.description}</p>
+                )}
+              </div>
             </div>
-          )}
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsRetrainModalOpen(true)}
+                title="Re-train schema cache for AI understanding"
+                className="gap-2"
+              >
+                <RefreshCw className="w-4 h-4" />
+                <span className="hidden sm:inline">Re-train Schema</span>
+              </Button>
 
-          {/* Retrain schema button */}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setIsRetrainModalOpen(true)}
-            className="h-8 px-2"
-          >
-            <RefreshCw className="w-4 h-4 mr-1" />
-            Retrain
-          </Button>
+              {/* Context Window Indicator */}
+              {chatHistory.length > 0 && (
+                <ContextIndicator
+                  percentageUsed={contextWindow.percentageUsed}
+                  totalTokens={contextWindow.totalTokens}
+                  maxTokens={contextManager.getConfig().maxTokens}
+                  messageCount={chatHistory.length}
+                />
+              )}
+
+              {/* Connection Status */}
+              {schemaError ? (
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-100 dark:bg-red-900/30">
+                  <div className="w-1.5 h-1.5 rounded-full bg-red-500 dark:bg-red-400" />
+                  <span className="text-xs font-medium text-red-700 dark:text-red-400">Not Trained</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-100 dark:bg-green-900/30">
+                  <div className="w-1.5 h-1.5 rounded-full bg-green-500 dark:bg-green-400 animate-pulse" />
+                  <span className="text-xs font-medium text-green-700 dark:text-green-400">Ready</span>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Schema error banner */}
-      {schemaError && (
-        <div className="px-4 py-3 bg-yellow-500/10 border-b border-yellow-500/20">
-          <div className="flex items-start gap-2">
-            <Database className="w-4 h-4 text-yellow-500 mt-0.5" />
-            <div className="flex-1">
-              <p className="text-sm font-medium text-yellow-500">Schema Not Trained</p>
-              <p className="text-xs text-yellow-500/80 mt-1">
-                Train the database schema to enable AI-powered queries.
+      {/* Chat Content Area - Scrollable */}
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto overflow-x-hidden min-h-0">
+        {!hasMessages ? (
+          // Welcome Screen - centered in full available height
+          <div className="h-full flex items-center justify-center px-4">
+            <div className="w-full max-w-2xl mx-auto text-center">
+              <div className="mb-6">
+                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 dark:from-blue-600 dark:to-purple-700 mb-4 shadow-lg">
+                  <Sparkles className="w-8 h-8 text-white" />
+                </div>
+              </div>
+              <h2 className="text-3xl font-bold mb-3 bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-400 dark:to-purple-400 bg-clip-text text-transparent">
+                Ask me anything about your database
+              </h2>
+              <p className="text-muted-foreground mx-auto max-w-md mb-8">
+                I can help you explore schemas, query data, analyze tables, and more.
+                Just ask in natural language or write SQL directly.
               </p>
-            </div>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setIsRetrainModalOpen(true)}
-              className="border-yellow-500/20 hover:bg-yellow-500/10"
-            >
-              Train Now
-            </Button>
-          </div>
-        </div>
-      )}
 
-      {/* Messages */}
-      <div
-        ref={scrollContainerRef}
-        className="flex-1 overflow-y-auto px-4 py-4 space-y-4"
-      >
-        {messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-center">
-            <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-              <Sparkles className="w-8 h-8 text-primary" />
+              {/* Example Prompts */}
+              {!schemaError && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full">
+                  <button
+                    onClick={() => handleExampleClick("Show me all tables in this database")}
+                    className="p-4 text-left rounded-lg border bg-card hover:bg-accent transition-colors"
+                  >
+                    <div className="font-medium text-sm mb-1">Explore Schema</div>
+                    <div className="text-xs text-muted-foreground">Show me all tables in this database</div>
+                  </button>
+                  <button
+                    onClick={() => handleExampleClick("SELECT * FROM users LIMIT 5")}
+                    className="p-4 text-left rounded-lg border bg-card hover:bg-accent transition-colors"
+                  >
+                    <div className="font-medium text-sm mb-1">Query Data</div>
+                    <div className="text-xs text-muted-foreground">SELECT * FROM users LIMIT 5</div>
+                  </button>
+                  <button
+                    onClick={() => handleExampleClick("What are the foreign key relationships?")}
+                    className="p-4 text-left rounded-lg border bg-card hover:bg-accent transition-colors"
+                  >
+                    <div className="font-medium text-sm mb-1">Analyze Relationships</div>
+                    <div className="text-xs text-muted-foreground">What are the foreign key relationships?</div>
+                  </button>
+                  <button
+                    onClick={() => handleExampleClick("Show table statistics")}
+                    className="p-4 text-left rounded-lg border bg-card hover:bg-accent transition-colors"
+                  >
+                    <div className="font-medium text-sm mb-1">Get Statistics</div>
+                    <div className="text-xs text-muted-foreground">Show table statistics</div>
+                  </button>
+                </div>
+              )}
+
+              {/* Schema Error Banner */}
+              {schemaError && (
+                <div className="mt-4 p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
+                  <div className="flex items-start gap-2">
+                    <Database className="w-5 h-5 text-yellow-500 mt-0.5" />
+                    <div className="flex-1 text-left">
+                      <p className="text-sm font-medium text-yellow-500">Schema Not Trained</p>
+                      <p className="text-xs text-yellow-500/80 mt-1">
+                        Train the database schema to enable AI-powered queries.
+                      </p>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setIsRetrainModalOpen(true)}
+                        className="mt-3 border-yellow-500/20 hover:bg-yellow-500/10"
+                      >
+                        Train Now
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
-            <h3 className="text-lg font-semibold mb-2">Start a conversation</h3>
-            <p className="text-sm text-muted-foreground max-w-sm">
-              Ask questions about your database schema, query data, or get insights.
-            </p>
           </div>
         ) : (
-          messages.map((msg, index) => (
-            <div
-              key={msg.id || index}
-              className={cn(
-                "flex gap-3 items-start",
-                msg.role === "user" ? "justify-end" : "justify-start"
+          // Messages
+          <div className="container max-w-4xl mx-auto px-2 py-6">
+            <div className="space-y-6 py-4">
+              {/* Show context summary when resuming a chat */}
+              {isResumingChat && (
+                <ChatContextSummary chatSessionId={chatSessionId!} className="mb-4" />
               )}
-            >
-              {msg.role === "assistant" && (
-                <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary/10 flex-shrink-0">
-                  <Sparkles className="w-4 h-4 text-primary" />
+
+              {/* Messages */}
+              {messages.map((msg, index) => (
+                <div key={msg.id || index}>
+                  {msg.role === 'user' ? (
+                    // User message
+                    <div className="flex justify-end mb-4">
+                      <div className="max-w-[80%] bg-primary text-primary-foreground rounded-2xl rounded-tr-sm px-4 py-3 shadow-sm">
+                        <CollapsibleMessage content={msg.content} />
+                      </div>
+                    </div>
+                  ) : (
+                    // AI Response
+                    <div className="flex gap-3 mb-4">
+                      <div className="flex-shrink-0">
+                        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 dark:from-blue-600 dark:to-purple-700 shadow-sm">
+                          {isLoading && index === messages.length - 1 ? (
+                            <Loader2 className="w-4 h-4 text-white animate-spin" />
+                          ) : (
+                            <Sparkles className="w-4 h-4 text-white" />
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="bg-card rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm border">
+                          <MessageMarkdown content={msg.content} />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              {/* Loading indicator for new message */}
+              {isLoading && messages.length > 0 && messages[messages.length - 1].role === 'user' && (
+                <div className="flex gap-3 mb-4">
+                  <div className="flex-shrink-0">
+                    <div className="flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600">
+                      <Loader2 className="w-4 h-4 text-white animate-spin" />
+                    </div>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="bg-card rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm border">
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Thinking...</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
 
-              <div
-                className={cn(
-                  "rounded-lg px-4 py-3 max-w-[80%]",
-                  msg.role === "user"
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted"
-                )}
-              >
-                {msg.role === "user" ? (
-                  <p className="text-sm whitespace-pre-wrap break-words">
-                    {msg.content}
-                  </p>
-                ) : (
-                  <MessageMarkdown content={msg.content} />
-                )}
-              </div>
-
-              {msg.role === "user" && (
-                <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary flex-shrink-0">
-                  <span className="text-xs font-medium text-primary-foreground">
-                    You
-                  </span>
+              {/* Error message */}
+              {error && (
+                <div className="flex gap-3 mb-4">
+                  <div className="flex-shrink-0">
+                    <div className="flex items-center justify-center w-8 h-8 rounded-full bg-destructive/20">
+                      <span className="text-sm font-medium text-destructive">!</span>
+                    </div>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="bg-destructive/10 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm border border-destructive/20">
+                      <p className="text-sm text-destructive">{error.message}</p>
+                    </div>
+                  </div>
                 </div>
               )}
-            </div>
-          ))
-        )}
 
-        {/* Loading indicator */}
-        {isLoading && (
-          <div className="flex gap-3 items-start">
-            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary/10 flex-shrink-0">
-              <Sparkles className="w-4 h-4 text-primary" />
-            </div>
-            <div className="rounded-lg px-4 py-3 bg-muted">
-              <div className="flex items-center gap-2">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span className="text-sm text-muted-foreground">Thinking...</span>
-              </div>
+              <div ref={messagesEndRef} />
             </div>
           </div>
         )}
-
-        {/* Error message */}
-        {error && (
-          <div className="flex gap-3 items-start">
-            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-destructive/10 flex-shrink-0">
-              <span className="text-xs font-medium text-destructive">!</span>
-            </div>
-            <div className="rounded-lg px-4 py-3 bg-destructive/10 border border-destructive/20">
-              <p className="text-sm text-destructive">{error.message}</p>
-            </div>
-          </div>
-        )}
-
-        <div ref={messagesEndRef} />
       </div>
 
-      {/* Input */}
-      <div className="px-4 py-3 border-t border-border/50 bg-card/50 backdrop-blur-sm">
-        <form onSubmit={handleSubmit} className="flex gap-2">
-          <Textarea
-            value={input}
-            onChange={handleInputChange}
-            onKeyDown={handleKeyDown}
-            placeholder="Ask a question about your database..."
-            className="min-h-[60px] max-h-[120px] resize-none"
-            disabled={isLoading || !!schemaError}
-          />
+      {/* Chat Input */}
+      <div className="flex-shrink-0 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="container max-w-4xl mx-auto px-2 py-4">
+          <form onSubmit={handleSubmit} className="flex gap-3 items-end">
+            <div className="relative flex-1">
+              <Textarea
+                value={input || ''}
+                onChange={handleInputChange}
+                onKeyDown={handleKeyDown}
+                placeholder={
+                  schemaError
+                    ? "Please train the schema first..."
+                    : "Ask a question or write SQL... (Shift + Enter for new line)"
+                }
+                className="pr-12 min-h-12 max-h-40 resize-none rounded-2xl border-2 focus-visible:ring-2 focus-visible:ring-primary py-3"
+                disabled={isLoading || !!schemaError}
+                rows={1}
+              />
+              {isLoading && (
+                <div className="absolute right-4 top-3">
+                  <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                </div>
+              )}
+            </div>
 
-          <div className="flex flex-col gap-2">
             {isLoading ? (
               <Button
                 type="button"
                 size="icon"
                 variant="outline"
                 onClick={stop}
-                className="h-[60px] w-[60px]"
+                className="h-12 w-12 rounded-2xl flex-shrink-0"
               >
                 <Square className="w-5 h-5" />
               </Button>
@@ -347,18 +487,17 @@ export function ChatInterfaceNew({ connection, chatSessionId }: ChatInterfaceNew
               <Button
                 type="submit"
                 size="icon"
-                disabled={!input.trim() || !!schemaError}
-                className="h-[60px] w-[60px]"
+                disabled={!input?.trim() || !!schemaError}
+                className="h-12 w-12 rounded-2xl flex-shrink-0 bg-gradient-to-br from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
               >
                 <Send className="w-5 h-5" />
               </Button>
             )}
-          </div>
-        </form>
-
-        <p className="text-xs text-muted-foreground mt-2">
-          Press Enter to send, Shift + Enter for new line
-        </p>
+          </form>
+          <p className="text-xs text-muted-foreground mt-2 text-center">
+            Press Enter to send, Shift + Enter for new line
+          </p>
+        </div>
       </div>
 
       {/* Retrain Modal */}
