@@ -1,12 +1,13 @@
 /**
- * Chat Interface using Vercel AI SDK with Original UI Style
- * Combines new backend with beloved original UI
+ * Chat Interface using Vercel AI SDK v5
+ * Built following official AI SDK UI documentation
  */
 
 "use client";
 
-import { useState, useEffect, useRef, FormEvent } from "react";
-import { useChat } from "ai/react";
+import { useState, useEffect, useRef } from "react";
+import { useChat } from "@ai-sdk/react";
+import { DefaultChatTransport } from "ai";
 import { Send, Sparkles, Database, Loader2, Square, RefreshCw, ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -18,7 +19,6 @@ import { ContextIndicator } from "./ContextIndicator";
 import { useMCPStore } from "@/stores/useMCPStore";
 import { useConnectionExplorer } from "@/contexts/ConnectionExplorerContext";
 import { toast } from "sonner";
-import { v4 as uuidv4 } from "uuid";
 import { cn } from "@/utils/ui";
 import { getContextManager } from "@/utils/contextManager";
 
@@ -64,7 +64,22 @@ function CollapsibleMessage({ content, maxLines = 3 }: { content: string; maxLin
   );
 }
 
+// Helper to extract text from UIMessage parts
+function getMessageText(message: any): string {
+  if (typeof message.content === 'string') {
+    return message.content;
+  }
+  if (message.parts && Array.isArray(message.parts)) {
+    return message.parts
+      .filter((part: any) => part.type === 'text')
+      .map((part: any) => part.text || '')
+      .join('');
+  }
+  return '';
+}
+
 export function ChatInterfaceNew({ connection, chatSessionId }: ChatInterfaceNewProps) {
+  const [input, setInput] = useState("");
   const [isRetrainModalOpen, setIsRetrainModalOpen] = useState(false);
   const [schemaError, setSchemaError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -90,23 +105,26 @@ export function ChatInterfaceNew({ connection, chatSessionId }: ChatInterfaceNew
   const contextManager = getContextManager();
   const contextWindow = contextManager.getContextWindow(chatHistory);
 
-  // Use Vercel AI SDK's useChat hook
+  // Use Vercel AI SDK's useChat hook (v5 API)
   const {
     messages,
-    input,
-    setInput,
-    handleInputChange,
-    handleSubmit: handleChatSubmit,
-    isLoading,
+    status,
     error,
+    sendMessage,
     stop,
     setMessages,
   } = useChat({
-    api: '/api/chat',
-    body: {
-      connectionId: connection.id,
-      userId: connection.userId || connection.owner_id || connection.ownerId,
-    },
+    transport: new DefaultChatTransport({
+      api: '/api/chat',
+      headers: {
+        'Authorization': `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('access_token') || sessionStorage.getItem('access_token') : ''}`,
+      },
+      body: {
+        connectionId: connection.id,
+        userId: connection.createdBy,
+        selectedSchema: selectedSchema,
+      },
+    }),
     onError: (error) => {
       console.error('[ChatInterface] Error:', error);
 
@@ -126,31 +144,23 @@ export function ChatInterfaceNew({ connection, chatSessionId }: ChatInterfaceNew
         });
       }
     },
-    onFinish: async (message) => {
+    onFinish: async ({ message }) => {
       console.log('[ChatInterface] Message completed:', message);
 
       // Save to chat history
-      if (currentChatSessionId) {
-        // Get all messages including the new one
-        const allMessages = [...messages, message];
+      if (currentChatSessionId && messages.length > 0) {
+        // Get the user message (should be the last message before the assistant response)
+        const userMessage = messages[messages.length - 1];
+        const userText = getMessageText(userMessage);
+        const assistantText = getMessageText(message);
 
-        // Convert to chat history format
-        const historyMessages = allMessages.map((m: any) => ({
-          id: m.id || uuidv4(),
-          role: m.role as 'user' | 'assistant',
-          content: m.content,
-          timestamp: new Date().toISOString(),
-        }));
+        // Save both messages
+        await saveChatMessages(userText, assistantText);
 
-        await saveChatMessages(currentChatSessionId, historyMessages);
-
-        // Generate title for first message if needed
-        if (!titleGeneratedRef.current && allMessages.length === 2) { // user + assistant
-          const userMessage = allMessages.find((m: any) => m.role === 'user');
-          if (userMessage) {
-            await generateChatTitle(currentChatSessionId, userMessage.content);
-            titleGeneratedRef.current = true;
-          }
+        // Generate title for first exchange if needed
+        if (!titleGeneratedRef.current && messages.length === 1) {
+          await generateChatTitle(userText);
+          titleGeneratedRef.current = true;
         }
       }
     },
@@ -166,11 +176,13 @@ export function ChatInterfaceNew({ connection, chatSessionId }: ChatInterfaceNew
         // Load history into useChat
         const { chatHistory: loadedHistory } = useMCPStore.getState();
         if (loadedHistory && loadedHistory.length > 0) {
-          setMessages(loadedHistory.map((msg: any) => ({
+          // Convert to UIMessage format
+          const uiMessages = loadedHistory.map((msg: any) => ({
             id: msg.id,
             role: msg.role,
-            content: msg.content,
-          })));
+            parts: [{ type: 'text', text: msg.content }],
+          }));
+          setMessages(uiMessages as any);
           titleGeneratedRef.current = true;
         }
       } else {
@@ -190,13 +202,13 @@ export function ChatInterfaceNew({ connection, chatSessionId }: ChatInterfaceNew
     if (scrollContainerRef.current) {
       scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
     }
-  }, [messages, isLoading]);
+  }, [messages, status]);
 
-  const handleSubmit = async (e: FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const messageToSend = input?.trim();
-    if (!messageToSend || isLoading) {
+    const messageToSend = input.trim();
+    if (!messageToSend || status === 'streaming' || status === 'submitted') {
       return;
     }
 
@@ -215,8 +227,11 @@ export function ChatInterfaceNew({ connection, chatSessionId }: ChatInterfaceNew
       }
     }
 
-    // Submit to AI
-    handleChatSubmit(e);
+    // Clear input immediately
+    setInput("");
+
+    // Send message using AI SDK v5 API
+    sendMessage({ text: messageToSend });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -230,6 +245,7 @@ export function ChatInterfaceNew({ connection, chatSessionId }: ChatInterfaceNew
     setInput(exampleText);
   };
 
+  const isLoading = status === 'streaming' || status === 'submitted';
   const hasMessages = messages.length > 0;
   const isResumingChat = chatSessionId && chatHistory.length > 0;
 
@@ -376,36 +392,40 @@ export function ChatInterfaceNew({ connection, chatSessionId }: ChatInterfaceNew
               )}
 
               {/* Messages */}
-              {messages.map((msg, index) => (
-                <div key={msg.id || index}>
-                  {msg.role === 'user' ? (
-                    // User message
-                    <div className="flex justify-end mb-4">
-                      <div className="max-w-[80%] bg-primary text-primary-foreground rounded-2xl rounded-tr-sm px-4 py-3 shadow-sm">
-                        <CollapsibleMessage content={msg.content} />
-                      </div>
-                    </div>
-                  ) : (
-                    // AI Response
-                    <div className="flex gap-3 mb-4">
-                      <div className="flex-shrink-0">
-                        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 dark:from-blue-600 dark:to-purple-700 shadow-sm">
-                          {isLoading && index === messages.length - 1 ? (
-                            <Loader2 className="w-4 h-4 text-white animate-spin" />
-                          ) : (
-                            <Sparkles className="w-4 h-4 text-white" />
-                          )}
+              {messages.map((msg, index) => {
+                const messageText = getMessageText(msg);
+
+                return (
+                  <div key={msg.id || index}>
+                    {msg.role === 'user' ? (
+                      // User message
+                      <div className="flex justify-end mb-4">
+                        <div className="max-w-[80%] bg-primary text-primary-foreground rounded-2xl rounded-tr-sm px-4 py-3 shadow-sm">
+                          <CollapsibleMessage content={messageText} />
                         </div>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="bg-card rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm border">
-                          <MessageMarkdown content={msg.content} />
+                    ) : (
+                      // AI Response
+                      <div className="flex gap-3 mb-4">
+                        <div className="flex-shrink-0">
+                          <div className="flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 dark:from-blue-600 dark:to-purple-700 shadow-sm">
+                            {isLoading && index === messages.length - 1 ? (
+                              <Loader2 className="w-4 h-4 text-white animate-spin" />
+                            ) : (
+                              <Sparkles className="w-4 h-4 text-white" />
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="bg-card rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm border">
+                            <MessageMarkdown content={messageText} />
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  )}
-                </div>
-              ))}
+                    )}
+                  </div>
+                );
+              })}
 
               {/* Loading indicator for new message */}
               {isLoading && messages.length > 0 && messages[messages.length - 1].role === 'user' && (
@@ -454,8 +474,8 @@ export function ChatInterfaceNew({ connection, chatSessionId }: ChatInterfaceNew
           <form onSubmit={handleSubmit} className="flex gap-3 items-end">
             <div className="relative flex-1">
               <Textarea
-                value={input || ''}
-                onChange={handleInputChange}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder={
                   schemaError
@@ -487,7 +507,7 @@ export function ChatInterfaceNew({ connection, chatSessionId }: ChatInterfaceNew
               <Button
                 type="submit"
                 size="icon"
-                disabled={!input?.trim() || !!schemaError}
+                disabled={!input.trim() || !!schemaError}
                 className="h-12 w-12 rounded-2xl flex-shrink-0 bg-gradient-to-br from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
               >
                 <Send className="w-5 h-5" />

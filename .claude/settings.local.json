@@ -24,7 +24,14 @@
       "Bash(/tmp/all_unstaged.patch)",
       "Bash(git add:*)",
       "Bash(test:*)",
-      "Bash(cd /Users/chiragahuja/Desktop/db-explorer-2/db-explorer-api && npx eslint:*)"
+      "Bash(cd /Users/chiragahuja/Desktop/db-explorer-2/db-explorer-api && npx eslint:*)",
+      "Bash(npm view:*)",
+      "Bash(npx tsc:*)",
+      "Bash(git checkout:*)",
+      "Bash(perl -i -pe:*)",
+      "Bash(bash /tmp/test_chat.sh:*)",
+      "Bash(timeout 10 bash:*)",
+      "Bash(ps:*)"
     ],
     "deny": [],
     "ask": []

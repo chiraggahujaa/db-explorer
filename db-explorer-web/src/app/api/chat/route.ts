@@ -15,9 +15,18 @@ export const maxDuration = 60;
 export const runtime = 'nodejs';
 
 // Helper to execute database queries via API
-async function executeDBQuery(connectionId: string, endpoint: string, params: any = {}) {
+async function executeDBQuery(connectionId: string, endpoint: string, params: any = {}, accessToken?: string) {
   try {
-    const response = await api.post(`/api/connections/${connectionId}/${endpoint}`, params);
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+
+    // Add authorization header if token is provided
+    if (accessToken) {
+      headers['Authorization'] = `Bearer ${accessToken}`;
+    }
+
+    const response = await api.post(`/api/connections/${connectionId}/${endpoint}`, params, { headers });
     return response.data;
   } catch (error: any) {
     throw new Error(error.response?.data?.error || error.message || 'Database operation failed');
@@ -26,7 +35,18 @@ async function executeDBQuery(connectionId: string, endpoint: string, params: an
 
 export async function POST(req: Request) {
   try {
-    const { messages, connectionId, userId } = await req.json();
+    // Extract access token from Authorization header
+    const authHeader = req.headers.get('Authorization');
+    const accessToken = authHeader?.replace('Bearer ', '');
+
+    if (!accessToken) {
+      return new Response(
+        JSON.stringify({ error: 'Access token required' }),
+        { status: 401, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const { messages, connectionId, userId, selectedSchema } = await req.json();
 
     if (!connectionId || !userId) {
       return new Response(
@@ -35,61 +55,93 @@ export async function POST(req: Request) {
       );
     }
 
-    // Fetch schema cache
+    // Fetch schema cache (optional)
     let schemaCache;
+    let schemaContext = '';
+    let staleWarning = '';
+    let canUseCache = false;
+
     try {
       schemaCache = await schemaTrainingAPI.getSchemaCache(connectionId);
     } catch (error) {
-      return new Response(
-        JSON.stringify({
-          error: 'Schema not trained. Please train the schema first.',
-          needsTraining: true
-        }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
-      );
+      console.log('[Chat API] Schema not trained, continuing without schema context');
     }
 
-    if (!schemaCache) {
-      return new Response(
-        JSON.stringify({
-          error: 'Schema cache not found. Please train the schema.',
-          needsTraining: true
-        }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
-      );
+    if (schemaCache) {
+      // Format schema for AI
+      schemaContext = formatSchemaForAI(schemaCache);
+      const schemaTokens = estimateTokens(schemaContext);
+
+      console.log(`[Chat API] Schema tokens: ${schemaTokens}`);
+
+      // Pad schema if close to caching threshold (for Gemini context caching)
+      if (shouldPadSchema(schemaTokens)) {
+        console.log('[Chat API] Padding schema to reach caching threshold');
+        const tokensNeeded = 32768 - schemaTokens;
+        schemaContext += generateSchemaPadding(schemaCache, tokensNeeded);
+        console.log(`[Chat API] Padded schema tokens: ${estimateTokens(schemaContext)}`);
+      }
+
+      // Check schema freshness
+      staleWarning = isSchemaStale(schemaCache.lastTrainedAt)
+        ? '\n\n⚠️ **NOTE:** Schema is older than 7 days. Consider retraining for accuracy.\n'
+        : '';
+
+      // Determine if we can use context caching
+      const finalTokens = estimateTokens(schemaContext);
+      canUseCache = finalTokens >= 32768;
+
+      console.log(`[Chat API] Using model with caching: ${canUseCache}`);
+    } else {
+      // No schema context available
+      schemaContext = `
+You are a database assistant. The database schema has not been trained yet, so you don't have pre-loaded context about the tables and columns.
+
+To help the user effectively:
+1. Use list_databases to discover available databases
+2. Use list_tables to see tables in a database
+3. Use describe_table to understand table structure before querying
+4. Build your understanding of the database dynamically as you explore
+
+⚠️ **NOTE:** For better performance and context, the user should train the schema first. This will pre-load all database structure information.
+`;
+      console.log('[Chat API] No schema context, AI will discover schema dynamically');
     }
 
-    // Format schema for AI
-    let schemaContext = formatSchemaForAI(schemaCache);
-    const schemaTokens = estimateTokens(schemaContext);
-
-    console.log(`[Chat API] Schema tokens: ${schemaTokens}`);
-
-    // Pad schema if close to caching threshold (for Gemini context caching)
-    if (shouldPadSchema(schemaTokens)) {
-      console.log('[Chat API] Padding schema to reach caching threshold');
-      const tokensNeeded = 32768 - schemaTokens;
-      schemaContext += generateSchemaPadding(schemaCache, tokensNeeded);
-      console.log(`[Chat API] Padded schema tokens: ${estimateTokens(schemaContext)}`);
+    // Add current database context if available
+    if (selectedSchema) {
+      schemaContext += `\n\n**CURRENT DATABASE CONTEXT:**\nThe user is currently viewing database/schema: "${selectedSchema}"\nWhen they ask to "list tables" or "show schemas" without specifying a database, they are referring to this database: "${selectedSchema}".\nAlways use this as the default database parameter when not explicitly specified.`;
+      console.log(`[Chat API] User context: Currently in database "${selectedSchema}"`);
     }
 
-    // Check schema freshness
-    const staleWarning = isSchemaStale(schemaCache.lastTrainedAt)
-      ? '\n\n⚠️ **NOTE:** Schema is older than 7 days. Consider retraining for accuracy.\n'
-      : '';
-
-    // Determine if we can use context caching
-    const finalTokens = estimateTokens(schemaContext);
-    const canUseCache = finalTokens >= 32768;
-    const model = canUseCache ? 'gemini-2.0-flash-exp' : 'gemini-2.0-flash-exp';
+    const model = 'gemini-2.5-flash';
 
     console.log(`[Chat API] Using model: ${model}, caching: ${canUseCache}`);
+    console.log('[Chat API] Received messages:', JSON.stringify(messages, null, 2));
+
+    // Transform UIMessages to CoreMessages
+    // UIMessages have { role, parts: [{type, text}], id }
+    // CoreMessages need { role, content: string }
+    const coreMessages = messages.map((msg: any) => {
+      if (msg.parts && Array.isArray(msg.parts)) {
+        // Extract text from parts array
+        const content = msg.parts
+          .filter((part: any) => part.type === 'text')
+          .map((part: any) => part.text)
+          .join('');
+        return { role: msg.role, content };
+      }
+      // Already in correct format
+      return msg;
+    });
+
+    console.log('[Chat API] Transformed to core messages:', JSON.stringify(coreMessages, null, 2));
 
     // Build system configuration
     const systemConfig: any = {
       model: google(model),
       system: schemaContext + staleWarning,
-      messages,
+      messages: coreMessages,
       maxSteps: 10,
       temperature: 0.7,
     };
@@ -116,7 +168,7 @@ export async function POST(req: Request) {
           connection: z.string().optional().describe('Connection ID (auto-injected)'),
         }),
         execute: async (args) => {
-          const result = await executeDBQuery(connectionId, 'schemas', {});
+          const result = await executeDBQuery(connectionId, 'schemas', {}, accessToken);
           return {
             databases: result.data?.map((s: any) => s.name) || [],
             count: result.data?.length || 0
@@ -131,7 +183,7 @@ export async function POST(req: Request) {
           connection: z.string().optional(),
         }),
         execute: async (args) => {
-          const result = await executeDBQuery(connectionId, `schemas/${args.database}/tables`, {});
+          const result = await executeDBQuery(connectionId, `schemas/${args.database}/tables`, {}, accessToken);
           return {
             tables: result.data?.map((t: any) => t.name) || [],
             count: result.data?.length || 0,
@@ -148,7 +200,7 @@ export async function POST(req: Request) {
           connection: z.string().optional(),
         }),
         execute: async (args) => {
-          const result = await executeDBQuery(connectionId, `schemas/${args.database}/tables/${args.table}`, {});
+          const result = await executeDBQuery(connectionId, `schemas/${args.database}/tables/${args.table}`, {}, accessToken);
           return {
             table: args.table,
             database: args.database,
@@ -168,7 +220,7 @@ export async function POST(req: Request) {
           connection: z.string().optional(),
         }),
         execute: async (args) => {
-          const result = await executeDBQuery(connectionId, `schemas/${args.database}/tables/${args.table}`, {});
+          const result = await executeDBQuery(connectionId, `schemas/${args.database}/tables/${args.table}`, {}, accessToken);
           return {
             table: args.table,
             indexes: result.data?.indexes || [],
@@ -187,7 +239,7 @@ export async function POST(req: Request) {
         execute: async (args) => {
           // If specific table provided, get its foreign keys
           if (args.table) {
-            const result = await executeDBQuery(connectionId, `schemas/${args.database}/tables/${args.table}`, {});
+            const result = await executeDBQuery(connectionId, `schemas/${args.database}/tables/${args.table}`, {}, accessToken);
             return {
               table: args.table,
               foreignKeys: result.data?.foreignKeys || []
@@ -195,12 +247,12 @@ export async function POST(req: Request) {
           }
 
           // Otherwise, get all tables and their foreign keys
-          const tablesResult = await executeDBQuery(connectionId, `schemas/${args.database}/tables`, {});
+          const tablesResult = await executeDBQuery(connectionId, `schemas/${args.database}/tables`, {}, accessToken);
           const tables = tablesResult.data || [];
 
           const allForeignKeys: any[] = [];
           for (const table of tables) {
-            const tableResult = await executeDBQuery(connectionId, `schemas/${args.database}/tables/${table.name}`, {});
+            const tableResult = await executeDBQuery(connectionId, `schemas/${args.database}/tables/${table.name}`, {}, accessToken);
             if (tableResult.data?.foreignKeys) {
               allForeignKeys.push({
                 table: table.name,
@@ -225,12 +277,12 @@ export async function POST(req: Request) {
         }),
         execute: async (args) => {
           // Get all tables to find dependencies
-          const tablesResult = await executeDBQuery(connectionId, `schemas/${args.database}/tables`, {});
+          const tablesResult = await executeDBQuery(connectionId, `schemas/${args.database}/tables`, {}, accessToken);
           const tables = tablesResult.data || [];
 
           const dependencies: any[] = [];
           for (const table of tables) {
-            const tableResult = await executeDBQuery(connectionId, `schemas/${args.database}/tables/${table.name}`, {});
+            const tableResult = await executeDBQuery(connectionId, `schemas/${args.database}/tables/${table.name}`, {}, accessToken);
             const fks = tableResult.data?.foreignKeys || [];
 
             // Check if any foreign keys reference our target table
@@ -279,7 +331,7 @@ export async function POST(req: Request) {
               limit: args.limit,
               offset: args.offset,
             }
-          });
+          }, accessToken);
           return result.data;
         }
       }),
@@ -300,7 +352,7 @@ export async function POST(req: Request) {
               count: true,
               where: args.where,
             }
-          });
+          }, accessToken);
           return {
             table: args.table,
             count: result.data?.count || 0
@@ -355,7 +407,7 @@ export async function POST(req: Request) {
               where: where || undefined,
               limit: args.limit,
             }
-          });
+          }, accessToken);
           return result.data;
         }
       }),
@@ -391,7 +443,7 @@ export async function POST(req: Request) {
         execute: async (args) => {
           const result = await executeDBQuery(connectionId, 'execute', {
             query: args.sql
-          });
+          }, accessToken);
           return result.data;
         }
       }),
@@ -413,7 +465,7 @@ export async function POST(req: Request) {
           ).join(', ');
 
           const sql = `INSERT INTO ${args.database}.${args.table} (${columns}) VALUES (${values})`;
-          const result = await executeDBQuery(connectionId, 'execute', { query: sql });
+          const result = await executeDBQuery(connectionId, 'execute', { query: sql }, accessToken);
           return {
             success: true,
             inserted: result.data
@@ -436,7 +488,7 @@ export async function POST(req: Request) {
           ).join(', ');
 
           const sql = `UPDATE ${args.database}.${args.table} SET ${setClause} WHERE ${args.where}`;
-          const result = await executeDBQuery(connectionId, 'execute', { query: sql });
+          const result = await executeDBQuery(connectionId, 'execute', { query: sql }, accessToken);
           return {
             success: true,
             updated: result.data
@@ -458,7 +510,7 @@ export async function POST(req: Request) {
           }
 
           const sql = `DELETE FROM ${args.database}.${args.table} WHERE ${args.where}`;
-          const result = await executeDBQuery(connectionId, 'execute', { query: sql });
+          const result = await executeDBQuery(connectionId, 'execute', { query: sql }, accessToken);
           return {
             success: true,
             deleted: result.data
@@ -487,7 +539,7 @@ export async function POST(req: Request) {
           ).join(', ');
 
           const sql = `INSERT INTO ${args.database}.${args.table} (${columns}) VALUES ${valueRows}`;
-          const result = await executeDBQuery(connectionId, 'execute', { query: sql });
+          const result = await executeDBQuery(connectionId, 'execute', { query: sql }, accessToken);
           return {
             success: true,
             inserted: args.data.length,
@@ -519,7 +571,7 @@ export async function POST(req: Request) {
           if (args.where) sql += ` WHERE ${args.where}`;
           if (args.limit) sql += ` LIMIT ${args.limit}`;
 
-          const result = await executeDBQuery(connectionId, 'execute', { query: sql });
+          const result = await executeDBQuery(connectionId, 'execute', { query: sql }, accessToken);
           return result.data;
         }
       }),
@@ -543,7 +595,7 @@ export async function POST(req: Request) {
             WHERE ${args.referencedTable}.${args.referencedColumn} IS NULL
               AND ${args.table}.${args.foreignKeyColumn} IS NOT NULL
           `;
-          const result = await executeDBQuery(connectionId, 'execute', { query: sql });
+          const result = await executeDBQuery(connectionId, 'execute', { query: sql }, accessToken);
           return {
             table: args.table,
             orphanedRecords: result.data,
@@ -561,7 +613,7 @@ export async function POST(req: Request) {
         }),
         execute: async (args) => {
           // Get table foreign keys
-          const tableInfo = await executeDBQuery(connectionId, `schemas/${args.database}/tables/${args.table}`, {});
+          const tableInfo = await executeDBQuery(connectionId, `schemas/${args.database}/tables/${args.table}`, {}, accessToken);
           const foreignKeys = tableInfo.data?.foreignKeys || [];
 
           const violations: any[] = [];
@@ -575,7 +627,7 @@ export async function POST(req: Request) {
               WHERE ${fk.referenced_table}.${fk.referenced_column} IS NULL
                 AND ${args.table}.${fk.column_name} IS NOT NULL
             `;
-            const result = await executeDBQuery(connectionId, 'execute', { query: sql });
+            const result = await executeDBQuery(connectionId, 'execute', { query: sql }, accessToken);
             const count = result.data?.[0]?.count || 0;
 
             if (count > 0) {
@@ -602,12 +654,12 @@ export async function POST(req: Request) {
           connection: z.string().optional(),
         }),
         execute: async (args) => {
-          const tablesResult = await executeDBQuery(connectionId, `schemas/${args.database}/tables`, {});
+          const tablesResult = await executeDBQuery(connectionId, `schemas/${args.database}/tables`, {}, accessToken);
           const tables = tablesResult.data || [];
 
           const relationships: any[] = [];
           for (const table of tables) {
-            const tableInfo = await executeDBQuery(connectionId, `schemas/${args.database}/tables/${table.name}`, {});
+            const tableInfo = await executeDBQuery(connectionId, `schemas/${args.database}/tables/${table.name}`, {}, accessToken);
             const fks = tableInfo.data?.foreignKeys || [];
 
             if (fks.length > 0) {
@@ -649,7 +701,7 @@ export async function POST(req: Request) {
               AVG(${args.column}) as avg_value
             FROM ${args.database}.${args.table}
           `;
-          const result = await executeDBQuery(connectionId, 'execute', { query: sql });
+          const result = await executeDBQuery(connectionId, 'execute', { query: sql }, accessToken);
           return {
             table: args.table,
             column: args.column,
@@ -666,7 +718,7 @@ export async function POST(req: Request) {
           connection: z.string().optional(),
         }),
         execute: async (args) => {
-          const result = await executeDBQuery(connectionId, 'schemas', {});
+          const result = await executeDBQuery(connectionId, 'schemas', {}, accessToken);
           return {
             tenants: result.data?.map((s: any) => s.name) || [],
             count: result.data?.length || 0
@@ -696,12 +748,12 @@ export async function POST(req: Request) {
           connection: z.string().optional(),
         }),
         execute: async (args) => {
-          const tablesResult = await executeDBQuery(connectionId, `schemas/${args.tenantId}/tables`, {});
+          const tablesResult = await executeDBQuery(connectionId, `schemas/${args.tenantId}/tables`, {}, accessToken);
           const tables = tablesResult.data || [];
 
           const schema: any[] = [];
           for (const table of tables) {
-            const tableInfo = await executeDBQuery(connectionId, `schemas/${args.tenantId}/tables/${table.name}`, {});
+            const tableInfo = await executeDBQuery(connectionId, `schemas/${args.tenantId}/tables/${table.name}`, {}, accessToken);
             schema.push({
               table: table.name,
               columns: tableInfo.data?.columns || [],
@@ -730,10 +782,10 @@ export async function POST(req: Request) {
           if (args.compareType === 'count') {
             const count1Result = await executeDBQuery(connectionId, 'query', {
               query: { table: args.table, database: args.tenant1, count: true }
-            });
+            }, accessToken);
             const count2Result = await executeDBQuery(connectionId, 'query', {
               query: { table: args.table, database: args.tenant2, count: true }
-            });
+            }, accessToken);
 
             return {
               table: args.table,
@@ -742,8 +794,8 @@ export async function POST(req: Request) {
               difference: Math.abs((count1Result.data?.count || 0) - (count2Result.data?.count || 0))
             };
           } else {
-            const schema1 = await executeDBQuery(connectionId, `schemas/${args.tenant1}/tables/${args.table}`, {});
-            const schema2 = await executeDBQuery(connectionId, `schemas/${args.tenant2}/tables/${args.table}`, {});
+            const schema1 = await executeDBQuery(connectionId, `schemas/${args.tenant1}/tables/${args.table}`, {}, accessToken);
+            const schema2 = await executeDBQuery(connectionId, `schemas/${args.tenant2}/tables/${args.table}`, {}, accessToken);
 
             return {
               table: args.table,
@@ -761,14 +813,14 @@ export async function POST(req: Request) {
           connection: z.string().optional(),
         }),
         execute: async (args) => {
-          const tablesResult = await executeDBQuery(connectionId, `schemas/${args.tenantId}/tables`, {});
+          const tablesResult = await executeDBQuery(connectionId, `schemas/${args.tenantId}/tables`, {}, accessToken);
           const tables = tablesResult.data || [];
 
           const tablesWithCounts: any[] = [];
           for (const table of tables) {
             const countResult = await executeDBQuery(connectionId, 'query', {
               query: { table: table.name, database: args.tenantId, count: true }
-            });
+            }, accessToken);
             tablesWithCounts.push({
               name: table.name,
               rowCount: countResult.data?.count || 0
@@ -793,7 +845,7 @@ export async function POST(req: Request) {
         }),
         execute: async (args) => {
           const sql = `EXPLAIN ${args.query}`;
-          const result = await executeDBQuery(connectionId, 'execute', { query: sql });
+          const result = await executeDBQuery(connectionId, 'execute', { query: sql }, accessToken);
           return {
             query: args.query,
             executionPlan: result.data
@@ -810,10 +862,10 @@ export async function POST(req: Request) {
         }),
         execute: async (args) => {
           // Get table info and row count
-          const tableInfo = await executeDBQuery(connectionId, `schemas/${args.database}/tables/${args.table}`, {});
+          const tableInfo = await executeDBQuery(connectionId, `schemas/${args.database}/tables/${args.table}`, {}, accessToken);
           const countResult = await executeDBQuery(connectionId, 'query', {
             query: { table: args.table, database: args.database, count: true }
-          });
+          }, accessToken);
 
           return {
             table: args.table,
@@ -835,7 +887,7 @@ export async function POST(req: Request) {
         }),
         execute: async (args) => {
           const sql = `OPTIMIZE TABLE ${args.database}.${args.table}`;
-          const result = await executeDBQuery(connectionId, 'execute', { query: sql });
+          const result = await executeDBQuery(connectionId, 'execute', { query: sql }, accessToken);
           return {
             table: args.table,
             success: true,
@@ -853,7 +905,7 @@ export async function POST(req: Request) {
         }),
         execute: async (args) => {
           const sql = `SHOW CREATE TABLE ${args.database}.${args.table}`;
-          const result = await executeDBQuery(connectionId, 'execute', { query: sql });
+          const result = await executeDBQuery(connectionId, 'execute', { query: sql }, accessToken);
           return {
             table: args.table,
             createStatement: result.data
@@ -868,7 +920,7 @@ export async function POST(req: Request) {
         }),
         execute: async (args) => {
           try {
-            const result = await executeDBQuery(connectionId, 'test', {});
+            const result = await executeDBQuery(connectionId, 'test', {}, accessToken);
             return {
               status: 'healthy',
               message: 'Connection is active and responding',
@@ -912,7 +964,7 @@ export async function POST(req: Request) {
             WHERE table_schema = '${args.database}'
             GROUP BY table_schema
           `;
-          const result = await executeDBQuery(connectionId, 'execute', { query: sql });
+          const result = await executeDBQuery(connectionId, 'execute', { query: sql }, accessToken);
           return {
             database: args.database,
             sizeInfo: result.data?.[0] || { size_mb: 0 }
@@ -923,7 +975,7 @@ export async function POST(req: Request) {
 
     // Stream the response
     const result = await streamText(systemConfig);
-    return result.toDataStreamResponse();
+    return result.toTextStreamResponse();
 
   } catch (error: any) {
     console.error('[Chat API] Error:', error);

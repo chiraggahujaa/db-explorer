@@ -177,3 +177,14 @@ export interface ActionResponse {
   message?: string;
   error?: string;
 }
+
+// Schema cache types
+export interface ConnectionSchemaCache {
+  id: string;
+  connection_id: string;
+  schemaData: any;
+  lastTrainedAt?: string;
+  training_status?: string;
+  created_at: string;
+  updated_at: string;
+}
