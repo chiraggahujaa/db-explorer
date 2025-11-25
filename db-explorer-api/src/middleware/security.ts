@@ -36,10 +36,10 @@ export const authRateLimit = createRateLimit(
   'Too many authentication attempts, please try again later'
 );
 
-// API rate limit - 200 requests per 15 minutes for general API calls
+// API rate limit - 500 requests per 15 minutes for general API calls
 export const apiRateLimit = createRateLimit(
-  15 * 60 * 1000, // 15 minutes
-  200,
+  5 * 60 * 1000, // 5 minutes
+  1000,
   'API rate limit exceeded, please try again later'
 );
 
