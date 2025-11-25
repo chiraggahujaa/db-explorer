@@ -48,6 +48,9 @@ router.post(
 // Database explorer routes
 router.get('/:id/schemas', connectionController.getSchemas.bind(connectionController));
 router.get('/:id/tables', connectionController.getTables.bind(connectionController));
+router.get('/:id/schemas/:schemaName/tables/:tableName', connectionController.getTableSchema.bind(connectionController));
+router.post('/:id/query', connectionController.executeStructuredQuery.bind(connectionController));
+router.post('/:id/execute', connectionController.executeSql.bind(connectionController));
 
 // Schema training routes
 router.post('/:id/train-schema', schemaTrainingController.trainSchema.bind(schemaTrainingController));

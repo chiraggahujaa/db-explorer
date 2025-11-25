@@ -32,6 +32,8 @@ interface ExplorerSidebarProps {
   onNewChat?: () => void;
   onSelectChat?: (chatSessionId: string) => void;
   currentChatSessionId?: string | null;
+  isOpen?: boolean;
+  onToggle?: () => void;
 }
 
 const MIN_SIDEBAR_WIDTH = 240;
@@ -42,7 +44,9 @@ export function ExplorerSidebar({
   initialConnectionId,
   onNewChat,
   onSelectChat,
-  currentChatSessionId
+  currentChatSessionId,
+  isOpen = true,
+  onToggle
 }: ExplorerSidebarProps) {
   const {
     selectedSchema,
@@ -243,11 +247,41 @@ export function ExplorerSidebar({
 
   const handleDatabaseClick = () => {
     setActiveView("database");
+    if (onToggle) onToggle(); // Toggle sidebar when clicking database icon
   };
 
   const handleRecentsClick = () => {
     setActiveView("recents");
+    if (onToggle) onToggle(); // Toggle sidebar when clicking recents icon
   };
+
+  // When collapsed, show the icon bar with both icons
+  if (!isOpen) {
+    return (
+      <div className="flex flex-col items-center gap-2 p-2 border-r bg-muted/30">
+        <button
+          onClick={handleDatabaseClick}
+          className={cn(
+            "p-2 rounded-md transition-colors",
+            "hover:bg-accent"
+          )}
+          title="Open Database view"
+        >
+          <Database className="w-5 h-5" />
+        </button>
+        <button
+          onClick={handleRecentsClick}
+          className={cn(
+            "p-2 rounded-md transition-colors",
+            "hover:bg-accent"
+          )}
+          title="Open Recents view"
+        >
+          <Clock className="w-5 h-5" />
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -279,6 +313,7 @@ export function ExplorerSidebar({
         >
           <Clock className="w-5 h-5" />
         </button>
+        <div className="flex-1" />
       </div>
 
       {/* Main Sidebar Content - Database Tab */}

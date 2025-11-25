@@ -25,6 +25,7 @@ export default function ConnectionExplorerPage() {
   });
 
   const [activeChatSessionId, setActiveChatSessionId] = useState<string | undefined>(undefined);
+  const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState(true);
 
   const { data: connection, isLoading: isLoadingConnection, error: connectionError } = useQuery({
     queryKey: ["connection", connectionId],
@@ -138,10 +139,12 @@ export default function ConnectionExplorerPage() {
           onNewChat={handleNewChat}
           onSelectChat={handleSelectChat}
           currentChatSessionId={activeChatSessionId}
+          isOpen={isLeftSidebarOpen}
+          onToggle={() => setIsLeftSidebarOpen(!isLeftSidebarOpen)}
         />
 
-        {/* Main Content Area */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Main Content Area - Chat interface will render right sidebar */}
+        <div className="flex-1 flex overflow-hidden">
           <ChatInterface
             connection={connection}
             chatSessionId={activeChatSessionId}

@@ -215,7 +215,257 @@ export class DatabaseExplorerService {
   }
 
   /**
-   * Execute a query on a connection
+   * Get table schema/structure
+   */
+  async getTableSchema(
+    connectionId: string,
+    userId: string,
+    schemaName: string,
+    tableName: string
+  ): Promise<ApiResponse<any>> {
+    let dbConnection: any = null;
+
+    try {
+      const { dbConnection: conn, dbType } = await this.getDatabaseConnection(
+        connectionId,
+        userId,
+        false
+      );
+      dbConnection = conn;
+
+      // Get table schema based on database type
+      const columns = await dbConnection.getTableSchema(tableName, schemaName);
+
+      // Get additional metadata like indexes, foreign keys if supported
+      let indexes: any[] = [];
+      let foreignKeys: any[] = [];
+      let primaryKey: any = null;
+
+      try {
+        if (dbType === 'mysql' || dbType === 'postgresql') {
+          // Get indexes
+          const indexQuery = dbType === 'mysql'
+            ? `SHOW INDEX FROM \`${schemaName}\`.\`${tableName}\``
+            : `SELECT * FROM pg_indexes WHERE schemaname = '${schemaName}' AND tablename = '${tableName}'`;
+
+          const indexResult = await dbConnection.query(indexQuery);
+          indexes = indexResult.results || [];
+
+          // Get foreign keys
+          if (dbType === 'mysql') {
+            const fkQuery = `
+              SELECT
+                COLUMN_NAME as column_name,
+                REFERENCED_TABLE_NAME as referenced_table,
+                REFERENCED_COLUMN_NAME as referenced_column
+              FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+              WHERE TABLE_SCHEMA = '${schemaName}'
+                AND TABLE_NAME = '${tableName}'
+                AND REFERENCED_TABLE_NAME IS NOT NULL
+            `;
+            const fkResult = await dbConnection.query(fkQuery);
+            foreignKeys = fkResult.results || [];
+          } else if (dbType === 'postgresql') {
+            const fkQuery = `
+              SELECT
+                kcu.column_name,
+                ccu.table_name AS referenced_table,
+                ccu.column_name AS referenced_column
+              FROM information_schema.table_constraints AS tc
+              JOIN information_schema.key_column_usage AS kcu
+                ON tc.constraint_name = kcu.constraint_name
+                AND tc.table_schema = kcu.table_schema
+              JOIN information_schema.constraint_column_usage AS ccu
+                ON ccu.constraint_name = tc.constraint_name
+                AND ccu.table_schema = tc.table_schema
+              WHERE tc.constraint_type = 'FOREIGN KEY'
+                AND tc.table_schema = '${schemaName}'
+                AND tc.table_name = '${tableName}'
+            `;
+            const fkResult = await dbConnection.query(fkQuery);
+            foreignKeys = fkResult.results || [];
+          }
+
+          // Extract primary key from columns
+          const pkColumns = columns.filter((col: any) =>
+            col.Key === 'PRI' || col.is_primary || (col.column_key && col.column_key === 'PRI')
+          );
+          if (pkColumns.length > 0) {
+            primaryKey = pkColumns.map((col: any) => col.Field || col.column_name || col.name);
+          }
+        }
+      } catch (metadataError) {
+        console.error('Error fetching table metadata:', metadataError);
+        // Continue without metadata
+      }
+
+      return {
+        success: true,
+        data: {
+          table: tableName,
+          schema: schemaName,
+          columns,
+          primaryKey,
+          foreignKeys,
+          indexes
+        }
+      };
+    } catch (error: any) {
+      console.error('Error in getTableSchema:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to fetch table schema',
+      };
+    } finally {
+      if (dbConnection) {
+        try {
+          await dbConnection.disconnect();
+        } catch (disconnectError) {
+          console.error('Error disconnecting database:', disconnectError);
+        }
+      }
+    }
+  }
+
+  /**
+   * Execute a raw SQL query
+   */
+  async executeSql(
+    connectionId: string,
+    userId: string,
+    sql: string,
+    schemaName?: string
+  ): Promise<ApiResponse<any>> {
+    let dbConnection: any = null;
+
+    try {
+      const { dbConnection: conn, dbType } = await this.getDatabaseConnection(
+        connectionId,
+        userId,
+        false
+      );
+      dbConnection = conn;
+
+      // For MySQL, switch to the database if specified
+      if (dbType === 'mysql' && schemaName) {
+        await dbConnection.query(`USE \`${schemaName}\``);
+      }
+
+      const result = await dbConnection.query(sql);
+
+      return {
+        success: true,
+        data: result.results || result || []
+      };
+    } catch (error: any) {
+      console.error('Error in executeSql:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to execute query',
+      };
+    } finally {
+      if (dbConnection) {
+        try {
+          await dbConnection.disconnect();
+        } catch (disconnectError) {
+          console.error('Error disconnecting database:', disconnectError);
+        }
+      }
+    }
+  }
+
+  /**
+   * Execute a structured query (SELECT with WHERE, ORDER BY, LIMIT, etc.)
+   */
+  async executeStructuredQuery(
+    connectionId: string,
+    userId: string,
+    queryParams: {
+      table: string;
+      database: string;
+      columns?: string[];
+      where?: string;
+      orderBy?: string;
+      limit?: number;
+      offset?: number;
+      count?: boolean;
+    }
+  ): Promise<ApiResponse<any>> {
+    let dbConnection: any = null;
+
+    try {
+      const { dbConnection: conn, dbType } = await this.getDatabaseConnection(
+        connectionId,
+        userId,
+        false
+      );
+      dbConnection = conn;
+
+      const { table, database, columns, where, orderBy, limit, offset, count } = queryParams;
+
+      // Build SQL query
+      let sql = '';
+
+      if (count) {
+        sql = `SELECT COUNT(*) as count FROM \`${database}\`.\`${table}\``;
+        if (where) {
+          sql += ` WHERE ${where}`;
+        }
+      } else {
+        const cols = columns && columns.length > 0 ? columns.join(', ') : '*';
+        sql = `SELECT ${cols} FROM \`${database}\`.\`${table}\``;
+
+        if (where) {
+          sql += ` WHERE ${where}`;
+        }
+
+        if (orderBy) {
+          sql += ` ORDER BY ${orderBy}`;
+        }
+
+        if (limit) {
+          sql += ` LIMIT ${limit}`;
+        }
+
+        if (offset) {
+          sql += ` OFFSET ${offset}`;
+        }
+      }
+
+      const result = await dbConnection.query(sql);
+
+      if (count) {
+        return {
+          success: true,
+          data: {
+            count: result.results[0]?.count || 0
+          }
+        };
+      }
+
+      return {
+        success: true,
+        data: result.results || []
+      };
+    } catch (error: any) {
+      console.error('Error in executeStructuredQuery:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to execute query',
+      };
+    } finally {
+      if (dbConnection) {
+        try {
+          await dbConnection.disconnect();
+        } catch (disconnectError) {
+          console.error('Error disconnecting database:', disconnectError);
+        }
+      }
+    }
+  }
+
+  /**
+   * Execute a query on a connection (legacy method, kept for backwards compatibility)
    */
   async executeQuery(
     connectionId: string,

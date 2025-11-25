@@ -7,7 +7,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport } from "ai";
+import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls } from "ai";
 import { Send, Sparkles, Database, Loader2, Square, RefreshCw, ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -16,6 +16,7 @@ import { MessageMarkdown } from "./MessageMarkdown";
 import { RetrainSchemaModal } from "./RetrainSchemaModal";
 import { ChatContextSummary } from "./ChatContextSummary";
 import { ContextIndicator } from "./ContextIndicator";
+import { ToolCallsSidebar } from "./ToolCallsSidebar";
 import { useMCPStore } from "@/stores/useMCPStore";
 import { useConnectionExplorer } from "@/contexts/ConnectionExplorerContext";
 import { toast } from "sonner";
@@ -78,16 +79,33 @@ function getMessageText(message: any): string {
   return '';
 }
 
+// Helper to extract tool calls from UIMessage parts
+function getToolCalls(message: any): any[] {
+  if (!message.parts || !Array.isArray(message.parts)) {
+    return [];
+  }
+  // Tool parts have type like 'tool-list_tables', 'tool-describe_table', etc.
+  // or 'dynamic-tool' for dynamic tools
+  return message.parts.filter((part: any) =>
+    part.type?.startsWith('tool-') || part.type === 'dynamic-tool'
+  );
+}
+
 export function ChatInterfaceNew({ connection, chatSessionId }: ChatInterfaceNewProps) {
   const [input, setInput] = useState("");
   const [isRetrainModalOpen, setIsRetrainModalOpen] = useState(false);
   const [schemaError, setSchemaError] = useState<string | null>(null);
+  const [isToolSidebarOpen, setIsToolSidebarOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const titleGeneratedRef = useRef<boolean>(false);
 
   // Get sidebar selection context
   const { selectedSchema, selectedTables } = useConnectionExplorer();
+
+  // Use ref to always get latest selectedSchema value in dynamic body function
+  const selectedSchemaRef = useRef(selectedSchema);
+  selectedSchemaRef.current = selectedSchema;
 
   // Get chat session state from store
   const {
@@ -114,15 +132,34 @@ export function ChatInterfaceNew({ connection, chatSessionId }: ChatInterfaceNew
     stop,
     setMessages,
   } = useChat({
+    // CRITICAL: Automatically continue after tool execution completes
+    // This ensures the AI generates text responses after calling tools
+    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
     transport: new DefaultChatTransport({
       api: '/api/chat',
-      headers: {
-        'Authorization': `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('access_token') || sessionStorage.getItem('access_token') : ''}`,
+      headers: () => {
+        // Dynamic header function - called for each request
+        const token = typeof window !== 'undefined'
+          ? localStorage.getItem('access_token') || sessionStorage.getItem('access_token')
+          : null;
+
+
+        return {
+          'Content-Type': 'application/json',
+          'Authorization': token ? `Bearer ${token}` : '',
+        };
       },
-      body: {
-        connectionId: connection.id,
-        userId: connection.createdBy,
-        selectedSchema: selectedSchema,
+      body: () => {
+        // Dynamic body function - called for each request to get latest context
+        // Use ref to get the latest selectedSchema value
+        const currentSchema = selectedSchemaRef.current;
+
+
+        return {
+          connectionId: connection.id,
+          userId: connection.createdBy,
+          selectedSchema: currentSchema,
+        };
       },
     }),
     onError: (error) => {
@@ -165,6 +202,18 @@ export function ChatInterfaceNew({ connection, chatSessionId }: ChatInterfaceNew
       }
     },
   });
+
+  // Collect all tool calls from all messages (latest first)
+  const allToolCalls = messages
+    .flatMap(msg => getToolCalls(msg))
+    .reverse(); // Reverse to show latest at top
+
+  // Auto-open sidebar when new tool calls appear - DISABLED
+  // useEffect(() => {
+  //   if (allToolCalls.length > 0 && !isToolSidebarOpen) {
+  //     setIsToolSidebarOpen(true);
+  //   }
+  // }, [allToolCalls.length, isToolSidebarOpen]);
 
   // Load chat history on mount
   useEffect(() => {
@@ -250,8 +299,10 @@ export function ChatInterfaceNew({ connection, chatSessionId }: ChatInterfaceNew
   const isResumingChat = chatSessionId && chatHistory.length > 0;
 
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-gradient-to-b from-background to-muted/20">
-      {/* Header */}
+    <>
+      {/* Main Chat Area */}
+      <div className="flex-1 flex flex-col h-full overflow-hidden bg-gradient-to-b from-background to-muted/20">
+        {/* Header */}
       <div className="flex-shrink-0 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container max-w-4xl mx-auto px-4 py-2">
           <div className="flex items-center justify-between">
@@ -358,6 +409,21 @@ export function ChatInterfaceNew({ connection, chatSessionId }: ChatInterfaceNew
                 </div>
               )}
 
+              {/* No Schema Selected Info */}
+              {!schemaError && !selectedSchema && (
+                <div className="mt-4 p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                  <div className="flex items-start gap-2">
+                    <Database className="w-5 h-5 text-blue-500 mt-0.5" />
+                    <div className="flex-1 text-left">
+                      <p className="text-sm font-medium text-blue-500">Tip: Select a Database</p>
+                      <p className="text-xs text-blue-500/80 mt-1">
+                        Select a database from the sidebar to enable context-aware queries like "list tables" without specifying which database.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Schema Error Banner */}
               {schemaError && (
                 <div className="mt-4 p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
@@ -395,6 +461,11 @@ export function ChatInterfaceNew({ connection, chatSessionId }: ChatInterfaceNew
               {messages.map((msg, index) => {
                 const messageText = getMessageText(msg);
 
+                // Skip rendering if there's no text (only tool calls)
+                if (!messageText && msg.role === 'assistant') {
+                  return null;
+                }
+
                 return (
                   <div key={msg.id || index}>
                     {msg.role === 'user' ? (
@@ -405,7 +476,7 @@ export function ChatInterfaceNew({ connection, chatSessionId }: ChatInterfaceNew
                         </div>
                       </div>
                     ) : (
-                      // AI Response
+                      // AI Response - only show text, tool calls are in sidebar
                       <div className="flex gap-3 mb-4">
                         <div className="flex-shrink-0">
                           <div className="flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 dark:from-blue-600 dark:to-purple-700 shadow-sm">
@@ -520,16 +591,24 @@ export function ChatInterfaceNew({ connection, chatSessionId }: ChatInterfaceNew
         </div>
       </div>
 
-      {/* Retrain Modal */}
-      <RetrainSchemaModal
-        open={isRetrainModalOpen}
-        onOpenChange={setIsRetrainModalOpen}
-        connection={connection}
-        onSuccess={() => {
-          setSchemaError(null);
-          toast.success('Schema trained successfully');
-        }}
+        {/* Retrain Modal */}
+        <RetrainSchemaModal
+          open={isRetrainModalOpen}
+          onOpenChange={setIsRetrainModalOpen}
+          connection={connection}
+          onSuccess={() => {
+            setSchemaError(null);
+            toast.success('Schema trained successfully');
+          }}
+        />
+      </div>
+
+      {/* Tool Calls Sidebar - Always render to show icon bar */}
+      <ToolCallsSidebar
+        toolCalls={allToolCalls}
+        isOpen={isToolSidebarOpen}
+        onToggle={() => setIsToolSidebarOpen(!isToolSidebarOpen)}
       />
-    </div>
+    </>
   );
 }

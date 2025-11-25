@@ -10,12 +10,13 @@ import { z } from 'zod';
 import { formatSchemaForAI, estimateTokens, shouldPadSchema, generateSchemaPadding, isSchemaStale } from '@/lib/schema-formatter';
 import { schemaTrainingAPI } from '@/lib/api/connections';
 import api from '@/lib/api/axios';
+import { getDatabaseAssistantPrompt } from '@/lib/prompts/database-assistant-prompt';
 
 export const maxDuration = 60;
 export const runtime = 'nodejs';
 
 // Helper to execute database queries via API
-async function executeDBQuery(connectionId: string, endpoint: string, params: any = {}, accessToken?: string) {
+async function executeDBQuery(connectionId: string, endpoint: string, params: any = {}, accessToken?: string, method: 'GET' | 'POST' = 'POST') {
   try {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -26,7 +27,12 @@ async function executeDBQuery(connectionId: string, endpoint: string, params: an
       headers['Authorization'] = `Bearer ${accessToken}`;
     }
 
-    const response = await api.post(`/api/connections/${connectionId}/${endpoint}`, params, { headers });
+    const url = `/api/connections/${connectionId}/${endpoint}`;
+
+    const response = method === 'GET'
+      ? await api.get(url, { headers, params })
+      : await api.post(url, params, { headers });
+
     return response.data;
   } catch (error: any) {
     throw new Error(error.response?.data?.error || error.message || 'Database operation failed');
@@ -48,6 +54,16 @@ export async function POST(req: Request) {
 
     const { messages, connectionId, userId, selectedSchema } = await req.json();
 
+    console.log('=== CHAT API REQUEST ===');
+    console.log('[Chat API] Connection ID:', connectionId);
+    console.log('[Chat API] User ID:', userId);
+    console.log('[Chat API] Selected Schema:', selectedSchema);
+    console.log('[Chat API] Schema Type:', typeof selectedSchema);
+    console.log('[Chat API] Schema is null?', selectedSchema === null);
+    console.log('[Chat API] Schema is undefined?', selectedSchema === undefined);
+    console.log('[Chat API] Message count:', messages?.length);
+    console.log('========================');
+
     if (!connectionId || !userId) {
       return new Response(
         JSON.stringify({ error: 'Missing connectionId or userId' }),
@@ -55,10 +71,9 @@ export async function POST(req: Request) {
       );
     }
 
-    // Fetch schema cache (optional)
+    // Fetch schema cache (optional) - this provides detailed database structure
     let schemaCache;
-    let schemaContext = '';
-    let staleWarning = '';
+    let schemaDataContext = '';
     let canUseCache = false;
 
     try {
@@ -69,43 +84,37 @@ export async function POST(req: Request) {
 
     if (schemaCache) {
       // Format schema for AI
-      schemaContext = formatSchemaForAI(schemaCache);
-      const schemaTokens = estimateTokens(schemaContext);
+      schemaDataContext = formatSchemaForAI(schemaCache);
+      const schemaTokens = estimateTokens(schemaDataContext);
 
-      console.log(`[Chat API] Schema tokens: ${schemaTokens}`);
+      console.log(`[Chat API] Schema data tokens: ${schemaTokens}`);
 
-      // Check schema freshness
-      staleWarning = isSchemaStale(schemaCache.lastTrainedAt)
-        ? '\n\n⚠️ **NOTE:** Schema is older than 7 days. Consider retraining for accuracy.\n'
-        : '';
+      // Add stale warning if needed
+      if (isSchemaStale(schemaCache.lastTrainedAt)) {
+        schemaDataContext += '\n\n⚠️ **NOTE:** Schema is older than 7 days. Consider retraining for accuracy.\n';
+      }
 
       // Gemini 2.5 Flash supports implicit caching (75% discount on cached prefixes)
       // Minimum tokens for caching: 1,024 tokens for Flash
-      const finalTokens = estimateTokens(schemaContext);
+      const finalTokens = estimateTokens(schemaDataContext);
       canUseCache = finalTokens >= 1024;
 
-      console.log(`[Chat API] Schema tokens: ${finalTokens}, eligible for caching: ${canUseCache}`);
+      console.log(`[Chat API] Schema eligible for caching: ${canUseCache}`);
     } else {
-      // No schema context available
-      schemaContext = `
-You are a database assistant. The database schema has not been trained yet, so you don't have pre-loaded context about the tables and columns.
-
-To help the user effectively:
-1. Use list_databases to discover available databases
-2. Use list_tables to see tables in a database
-3. Use describe_table to understand table structure before querying
-4. Build your understanding of the database dynamically as you explore
-
-⚠️ **NOTE:** For better performance and context, the user should train the schema first. This will pre-load all database structure information.
-`;
       console.log('[Chat API] No schema context, AI will discover schema dynamically');
     }
 
-    // Add current database context if available
-    if (selectedSchema) {
-      schemaContext += `\n\n**CURRENT DATABASE CONTEXT:**\nThe user is currently viewing database/schema: "${selectedSchema}"\nWhen they ask to "list tables" or "show schemas" without specifying a database, they are referring to this database: "${selectedSchema}".\nAlways use this as the default database parameter when not explicitly specified.`;
-      console.log(`[Chat API] User context: Currently in database "${selectedSchema}"`);
-    }
+    // Build comprehensive system prompt
+    const systemPrompt = getDatabaseAssistantPrompt(selectedSchema);
+
+    // If we have trained schema data, append it to the prompt
+    const fullSystemPrompt = schemaDataContext
+      ? `${systemPrompt}\n\n## PRE-LOADED DATABASE SCHEMA\n\n${schemaDataContext}`
+      : systemPrompt;
+
+    console.log(`[Chat API] System prompt length: ${fullSystemPrompt.length} chars, selected schema: ${selectedSchema || 'none'}`);
+    console.log(`[Chat API] Using comprehensive prompt with ${schemaDataContext ? 'pre-loaded schema' : 'dynamic schema discovery'}`);
+
 
     const model = 'gemini-2.5-flash';
 
@@ -122,8 +131,10 @@ To help the user effectively:
     // providing 75% cost reduction on cached content (min 1,024 tokens)
     const systemConfig: any = {
       model: google(model),
-      system: schemaContext + staleWarning,
+      system: fullSystemPrompt,
       messages: coreMessages,
+      // CRITICAL: Use maxSteps to allow multi-step tool execution
+      // This enables the AI to call tools AND generate text responses in the same turn
       maxSteps: 10,
       temperature: 0.7,
     };
@@ -141,7 +152,7 @@ To help the user effectively:
           connection: z.string().optional().describe('Connection ID (auto-injected)'),
         }),
         execute: async (input, options) => {
-          const result = await executeDBQuery(connectionId, 'schemas', {}, accessToken);
+          const result = await executeDBQuery(connectionId, 'schemas', {}, accessToken, 'GET');
           return {
             databases: result.data?.map((s: any) => s.name) || [],
             count: result.data?.length || 0
@@ -156,7 +167,7 @@ To help the user effectively:
           connection: z.string().optional(),
         }),
         execute: async (input, options) => {
-          const result = await executeDBQuery(connectionId, `schemas/${input.database}/tables`, {}, accessToken);
+          const result = await executeDBQuery(connectionId, 'tables', { schema: input.database }, accessToken, 'GET');
           return {
             tables: result.data?.map((t: any) => t.name) || [],
             count: result.data?.length || 0,
@@ -173,7 +184,7 @@ To help the user effectively:
           connection: z.string().optional(),
         }),
         execute: async (input, options) => {
-          const result = await executeDBQuery(connectionId, `schemas/${input.database}/tables/${input.table}`, {}, accessToken);
+          const result = await executeDBQuery(connectionId, `schemas/${input.database}/tables/${input.table}`, {}, accessToken, 'GET');
           return {
             table: input.table,
             database: input.database,
@@ -193,7 +204,7 @@ To help the user effectively:
           connection: z.string().optional(),
         }),
         execute: async (input, options) => {
-          const result = await executeDBQuery(connectionId, `schemas/${input.database}/tables/${input.table}`, {}, accessToken);
+          const result = await executeDBQuery(connectionId, `schemas/${input.database}/tables/${input.table}`, {}, accessToken, 'GET');
           return {
             table: input.table,
             indexes: result.data?.indexes || [],
@@ -212,7 +223,7 @@ To help the user effectively:
         execute: async (input, options) => {
           // If specific table provided, get its foreign keys
           if (input.table) {
-            const result = await executeDBQuery(connectionId, `schemas/${input.database}/tables/${input.table}`, {}, accessToken);
+            const result = await executeDBQuery(connectionId, `schemas/${input.database}/tables/${input.table}`, {}, accessToken, 'GET');
             return {
               table: input.table,
               foreignKeys: result.data?.foreignKeys || []
@@ -220,12 +231,12 @@ To help the user effectively:
           }
 
           // Otherwise, get all tables and their foreign keys
-          const tablesResult = await executeDBQuery(connectionId, `schemas/${input.database}/tables`, {}, accessToken);
+          const tablesResult = await executeDBQuery(connectionId, 'tables', { schema: input.database }, accessToken, 'GET');
           const tables = tablesResult.data || [];
 
           const allForeignKeys: any[] = [];
           for (const table of tables) {
-            const tableResult = await executeDBQuery(connectionId, `schemas/${input.database}/tables/${table.name}`, {}, accessToken);
+            const tableResult = await executeDBQuery(connectionId, `schemas/${input.database}/tables/${table.name}`, {}, accessToken, 'GET');
             if (tableResult.data?.foreignKeys) {
               allForeignKeys.push({
                 table: table.name,
@@ -250,12 +261,12 @@ To help the user effectively:
         }),
         execute: async (input, options) => {
           // Get all tables to find dependencies
-          const tablesResult = await executeDBQuery(connectionId, `schemas/${input.database}/tables`, {}, accessToken);
+          const tablesResult = await executeDBQuery(connectionId, 'tables', { schema: input.database }, accessToken, 'GET');
           const tables = tablesResult.data || [];
 
           const dependencies: any[] = [];
           for (const table of tables) {
-            const tableResult = await executeDBQuery(connectionId, `schemas/${input.database}/tables/${table.name}`, {}, accessToken);
+            const tableResult = await executeDBQuery(connectionId, `schemas/${input.database}/tables/${table.name}`, {}, accessToken, 'GET');
             const fks = tableResult.data?.foreignKeys || [];
 
             // Check if any foreign keys reference our target table
@@ -304,8 +315,8 @@ To help the user effectively:
               limit: input.limit,
               offset: input.offset,
             }
-          }, accessToken);
-          return result.data;
+          }, accessToken, 'POST');
+          return result.data || [];
         }
       }),
 
@@ -325,7 +336,7 @@ To help the user effectively:
               count: true,
               where: input.where,
             }
-          }, accessToken);
+          }, accessToken, 'POST');
           return {
             table: input.table,
             count: result.data?.count || 0
@@ -402,7 +413,7 @@ To help the user effectively:
               orderBy: `${input.dateColumn} DESC`,
               limit: input.limit,
             }
-          });
+          }, accessToken);
           return result.data;
         }
       }),
@@ -411,13 +422,15 @@ To help the user effectively:
         description: 'Execute custom SQL query (SELECT, UPDATE, INSERT, DELETE)',
         inputSchema: z.object({
           sql: z.string().describe('SQL query to execute'),
+          schema: z.string().optional().describe('Database/schema name (optional)'),
           connection: z.string().optional(),
         }),
         execute: async (input, options) => {
           const result = await executeDBQuery(connectionId, 'execute', {
-            query: input.sql
-          }, accessToken);
-          return result.data;
+            query: input.sql,
+            schema: input.schema
+          }, accessToken, 'POST');
+          return result.data || [];
         }
       }),
 
@@ -438,7 +451,7 @@ To help the user effectively:
           ).join(', ');
 
           const sql = `INSERT INTO ${input.database}.${input.table} (${columns}) VALUES (${values})`;
-          const result = await executeDBQuery(connectionId, 'execute', { query: sql }, accessToken);
+          const result = await executeDBQuery(connectionId, 'execute', { query: sql }, accessToken, 'POST');
           return {
             success: true,
             inserted: result.data
@@ -461,7 +474,7 @@ To help the user effectively:
           ).join(', ');
 
           const sql = `UPDATE ${input.database}.${input.table} SET ${setClause} WHERE ${input.where}`;
-          const result = await executeDBQuery(connectionId, 'execute', { query: sql }, accessToken);
+          const result = await executeDBQuery(connectionId, 'execute', { query: sql }, accessToken, 'POST');
           return {
             success: true,
             updated: result.data
@@ -483,7 +496,7 @@ To help the user effectively:
           }
 
           const sql = `DELETE FROM ${input.database}.${input.table} WHERE ${input.where}`;
-          const result = await executeDBQuery(connectionId, 'execute', { query: sql }, accessToken);
+          const result = await executeDBQuery(connectionId, 'execute', { query: sql }, accessToken, 'POST');
           return {
             success: true,
             deleted: result.data
@@ -512,7 +525,7 @@ To help the user effectively:
           ).join(', ');
 
           const sql = `INSERT INTO ${input.database}.${input.table} (${columns}) VALUES ${valueRows}`;
-          const result = await executeDBQuery(connectionId, 'execute', { query: sql }, accessToken);
+          const result = await executeDBQuery(connectionId, 'execute', { query: sql }, accessToken, 'POST');
           return {
             success: true,
             inserted: input.data.length,
@@ -544,8 +557,8 @@ To help the user effectively:
           if (input.where) sql += ` WHERE ${input.where}`;
           if (input.limit) sql += ` LIMIT ${input.limit}`;
 
-          const result = await executeDBQuery(connectionId, 'execute', { query: sql }, accessToken);
-          return result.data;
+          const result = await executeDBQuery(connectionId, 'execute', { query: sql, schema: input.database }, accessToken, 'POST');
+          return result.data || [];
         }
       }),
 
@@ -568,10 +581,10 @@ To help the user effectively:
             WHERE ${input.referencedTable}.${input.referencedColumn} IS NULL
               AND ${input.table}.${input.foreignKeyColumn} IS NOT NULL
           `;
-          const result = await executeDBQuery(connectionId, 'execute', { query: sql }, accessToken);
+          const result = await executeDBQuery(connectionId, 'execute', { query: sql, schema: input.database }, accessToken, 'POST');
           return {
             table: input.table,
-            orphanedRecords: result.data,
+            orphanedRecords: result.data || [],
             count: Array.isArray(result.data) ? result.data.length : 0
           };
         }
@@ -586,7 +599,7 @@ To help the user effectively:
         }),
         execute: async (input, options) => {
           // Get table foreign keys
-          const tableInfo = await executeDBQuery(connectionId, `schemas/${input.database}/tables/${input.table}`, {}, accessToken);
+          const tableInfo = await executeDBQuery(connectionId, `schemas/${input.database}/tables/${input.table}`, {}, accessToken, 'GET');
           const foreignKeys = tableInfo.data?.foreignKeys || [];
 
           const violations: any[] = [];
@@ -600,7 +613,7 @@ To help the user effectively:
               WHERE ${fk.referenced_table}.${fk.referenced_column} IS NULL
                 AND ${input.table}.${fk.column_name} IS NOT NULL
             `;
-            const result = await executeDBQuery(connectionId, 'execute', { query: sql }, accessToken);
+            const result = await executeDBQuery(connectionId, 'execute', { query: sql, schema: input.database }, accessToken, 'POST');
             const count = result.data?.[0]?.count || 0;
 
             if (count > 0) {
@@ -627,12 +640,12 @@ To help the user effectively:
           connection: z.string().optional(),
         }),
         execute: async (input, options) => {
-          const tablesResult = await executeDBQuery(connectionId, `schemas/${input.database}/tables`, {}, accessToken);
+          const tablesResult = await executeDBQuery(connectionId, 'tables', { schema: input.database }, accessToken, 'GET');
           const tables = tablesResult.data || [];
 
           const relationships: any[] = [];
           for (const table of tables) {
-            const tableInfo = await executeDBQuery(connectionId, `schemas/${input.database}/tables/${table.name}`, {}, accessToken);
+            const tableInfo = await executeDBQuery(connectionId, `schemas/${input.database}/tables/${table.name}`, {}, accessToken, 'GET');
             const fks = tableInfo.data?.foreignKeys || [];
 
             if (fks.length > 0) {
@@ -674,7 +687,7 @@ To help the user effectively:
               AVG(${input.column}) as avg_value
             FROM ${input.database}.${input.table}
           `;
-          const result = await executeDBQuery(connectionId, 'execute', { query: sql }, accessToken);
+          const result = await executeDBQuery(connectionId, 'execute', { query: sql, schema: input.database }, accessToken, 'POST');
           return {
             table: input.table,
             column: input.column,
@@ -691,7 +704,7 @@ To help the user effectively:
           connection: z.string().optional(),
         }),
         execute: async (input, options) => {
-          const result = await executeDBQuery(connectionId, 'schemas', {}, accessToken);
+          const result = await executeDBQuery(connectionId, 'schemas', {}, accessToken, 'GET');
           return {
             tenants: result.data?.map((s: any) => s.name) || [],
             count: result.data?.length || 0
@@ -721,12 +734,12 @@ To help the user effectively:
           connection: z.string().optional(),
         }),
         execute: async (input, options) => {
-          const tablesResult = await executeDBQuery(connectionId, `schemas/${input.tenantId}/tables`, {}, accessToken);
+          const tablesResult = await executeDBQuery(connectionId, 'tables', { schema: input.tenantId }, accessToken, 'GET');
           const tables = tablesResult.data || [];
 
           const schema: any[] = [];
           for (const table of tables) {
-            const tableInfo = await executeDBQuery(connectionId, `schemas/${input.tenantId}/tables/${table.name}`, {}, accessToken);
+            const tableInfo = await executeDBQuery(connectionId, `schemas/${input.tenantId}/tables/${table.name}`, {}, accessToken, 'GET');
             schema.push({
               table: table.name,
               columns: tableInfo.data?.columns || [],
@@ -755,10 +768,10 @@ To help the user effectively:
           if (input.compareType === 'count') {
             const count1Result = await executeDBQuery(connectionId, 'query', {
               query: { table: input.table, database: input.tenant1, count: true }
-            }, accessToken);
+            }, accessToken, 'POST');
             const count2Result = await executeDBQuery(connectionId, 'query', {
               query: { table: input.table, database: input.tenant2, count: true }
-            }, accessToken);
+            }, accessToken, 'POST');
 
             return {
               table: input.table,
@@ -767,8 +780,8 @@ To help the user effectively:
               difference: Math.abs((count1Result.data?.count || 0) - (count2Result.data?.count || 0))
             };
           } else {
-            const schema1 = await executeDBQuery(connectionId, `schemas/${input.tenant1}/tables/${input.table}`, {}, accessToken);
-            const schema2 = await executeDBQuery(connectionId, `schemas/${input.tenant2}/tables/${input.table}`, {}, accessToken);
+            const schema1 = await executeDBQuery(connectionId, `schemas/${input.tenant1}/tables/${input.table}`, {}, accessToken, 'GET');
+            const schema2 = await executeDBQuery(connectionId, `schemas/${input.tenant2}/tables/${input.table}`, {}, accessToken, 'GET');
 
             return {
               table: input.table,
@@ -786,14 +799,14 @@ To help the user effectively:
           connection: z.string().optional(),
         }),
         execute: async (input, options) => {
-          const tablesResult = await executeDBQuery(connectionId, `schemas/${input.tenantId}/tables`, {}, accessToken);
+          const tablesResult = await executeDBQuery(connectionId, 'tables', { schema: input.tenantId }, accessToken, 'GET');
           const tables = tablesResult.data || [];
 
           const tablesWithCounts: any[] = [];
           for (const table of tables) {
             const countResult = await executeDBQuery(connectionId, 'query', {
               query: { table: table.name, database: input.tenantId, count: true }
-            }, accessToken);
+            }, accessToken, 'POST');
             tablesWithCounts.push({
               name: table.name,
               rowCount: countResult.data?.count || 0
@@ -814,14 +827,15 @@ To help the user effectively:
         description: 'Get query execution plan and optimization information',
         inputSchema: z.object({
           query: z.string().describe('SQL query to explain'),
+          schema: z.string().optional().describe('Database/schema name (optional)'),
           connection: z.string().optional(),
         }),
         execute: async (input, options) => {
           const sql = `EXPLAIN ${input.query}`;
-          const result = await executeDBQuery(connectionId, 'execute', { query: sql }, accessToken);
+          const result = await executeDBQuery(connectionId, 'execute', { query: sql, schema: input.schema }, accessToken, 'POST');
           return {
             query: input.query,
-            executionPlan: result.data
+            executionPlan: result.data || []
           };
         }
       }),
@@ -835,10 +849,10 @@ To help the user effectively:
         }),
         execute: async (input, options) => {
           // Get table info and row count
-          const tableInfo = await executeDBQuery(connectionId, `schemas/${input.database}/tables/${input.table}`, {}, accessToken);
+          const tableInfo = await executeDBQuery(connectionId, `schemas/${input.database}/tables/${input.table}`, {}, accessToken, 'GET');
           const countResult = await executeDBQuery(connectionId, 'query', {
             query: { table: input.table, database: input.database, count: true }
-          }, accessToken);
+          }, accessToken, 'POST');
 
           return {
             table: input.table,
@@ -860,11 +874,11 @@ To help the user effectively:
         }),
         execute: async (input, options) => {
           const sql = `OPTIMIZE TABLE ${input.database}.${input.table}`;
-          const result = await executeDBQuery(connectionId, 'execute', { query: sql }, accessToken);
+          const result = await executeDBQuery(connectionId, 'execute', { query: sql, schema: input.database }, accessToken, 'POST');
           return {
             table: input.table,
             success: true,
-            result: result.data
+            result: result.data || []
           };
         }
       }),
@@ -878,10 +892,10 @@ To help the user effectively:
         }),
         execute: async (input, options) => {
           const sql = `SHOW CREATE TABLE ${input.database}.${input.table}`;
-          const result = await executeDBQuery(connectionId, 'execute', { query: sql }, accessToken);
+          const result = await executeDBQuery(connectionId, 'execute', { query: sql, schema: input.database }, accessToken, 'POST');
           return {
             table: input.table,
-            createStatement: result.data
+            createStatement: result.data || []
           };
         }
       }),
@@ -893,11 +907,12 @@ To help the user effectively:
         }),
         execute: async (input, options) => {
           try {
-            const result = await executeDBQuery(connectionId, 'test', {}, accessToken);
+            // Just try listing schemas to test connection
+            const result = await executeDBQuery(connectionId, 'schemas', {}, accessToken, 'GET');
             return {
               status: 'healthy',
               message: 'Connection is active and responding',
-              details: result.data
+              databases: result.data?.length || 0
             };
           } catch (error: any) {
             return {
@@ -937,7 +952,7 @@ To help the user effectively:
             WHERE table_schema = '${input.database}'
             GROUP BY table_schema
           `;
-          const result = await executeDBQuery(connectionId, 'execute', { query: sql }, accessToken);
+          const result = await executeDBQuery(connectionId, 'execute', { query: sql, schema: input.database }, accessToken, 'POST');
           return {
             database: input.database,
             sizeInfo: result.data?.[0] || { size_mb: 0 }
