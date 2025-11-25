@@ -6,7 +6,7 @@ import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { connectionsAPI } from "@/lib/api/connections";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
 import { ExplorerSidebar } from "@/components/connections/ExplorerSidebar";
-import { ChatInterface } from "@/components/connections/ChatInterface";
+import { ChatInterfaceNew as ChatInterface } from "@/components/connections/ChatInterfaceNew";
 import { ConnectionExplorerProvider } from "@/contexts/ConnectionExplorerContext";
 import { getClaudeService } from "@/services/ClaudeService";
 import { useMCPStore } from "@/stores/useMCPStore";
@@ -25,6 +25,7 @@ export default function ConnectionExplorerPage() {
   });
 
   const [activeChatSessionId, setActiveChatSessionId] = useState<string | undefined>(undefined);
+  const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState(true);
 
   const { data: connection, isLoading: isLoadingConnection, error: connectionError } = useQuery({
     queryKey: ["connection", connectionId],
@@ -138,10 +139,12 @@ export default function ConnectionExplorerPage() {
           onNewChat={handleNewChat}
           onSelectChat={handleSelectChat}
           currentChatSessionId={activeChatSessionId}
+          isOpen={isLeftSidebarOpen}
+          onToggle={() => setIsLeftSidebarOpen(!isLeftSidebarOpen)}
         />
 
-        {/* Main Content Area */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Main Content Area - Chat interface will render right sidebar */}
+        <div className="flex-1 flex overflow-hidden">
           <ChatInterface
             connection={connection}
             chatSessionId={activeChatSessionId}

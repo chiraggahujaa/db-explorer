@@ -914,4 +914,171 @@ export class ConnectionController {
       });
     }
   }
+
+  /**
+   * Get table schema/structure
+   * GET /api/connections/:id/schemas/:schemaName/tables/:tableName
+   */
+  async getTableSchema(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          error: 'User not authenticated',
+        });
+      }
+
+      const { id, schemaName, tableName } = req.params;
+      uuidSchema.parse(id);
+
+      if (!schemaName || !tableName) {
+        return res.status(400).json({
+          success: false,
+          error: 'Schema name and table name are required',
+        });
+      }
+
+      const result = await this.databaseExplorerService.getTableSchema(
+        id,
+        userId as string,
+        schemaName,
+        tableName
+      );
+
+      if (!result.success) {
+        return res.status(404).json(result);
+      }
+
+      res.status(200).json(result);
+    } catch (error: any) {
+      console.error('Get table schema error:', error);
+
+      if (error.name === 'ZodError') {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid connection ID',
+          details: error.issues,
+        });
+      }
+
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error',
+      });
+    }
+  }
+
+  /**
+   * Execute a structured query
+   * POST /api/connections/:id/query
+   * Body: { query: { table, database, columns?, where?, orderBy?, limit?, offset?, count? } }
+   */
+  async executeStructuredQuery(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          error: 'User not authenticated',
+        });
+      }
+
+      const { id } = req.params;
+      uuidSchema.parse(id);
+
+      const { query } = req.body;
+
+      if (!query || !query.table || !query.database) {
+        return res.status(400).json({
+          success: false,
+          error: 'Query parameters must include table and database',
+        });
+      }
+
+      const result = await this.databaseExplorerService.executeStructuredQuery(
+        id,
+        userId as string,
+        query
+      );
+
+      if (!result.success) {
+        return res.status(400).json(result);
+      }
+
+      res.status(200).json(result);
+    } catch (error: any) {
+      console.error('Execute structured query error:', error);
+
+      if (error.name === 'ZodError') {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid connection ID',
+          details: error.issues,
+        });
+      }
+
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error',
+      });
+    }
+  }
+
+  /**
+   * Execute raw SQL
+   * POST /api/connections/:id/execute
+   * Body: { query: string, schema?: string }
+   */
+  async executeSql(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          error: 'User not authenticated',
+        });
+      }
+
+      const { id } = req.params;
+      uuidSchema.parse(id);
+
+      const { query, schema } = req.body;
+
+      if (!query) {
+        return res.status(400).json({
+          success: false,
+          error: 'Query is required',
+        });
+      }
+
+      const result = await this.databaseExplorerService.executeSql(
+        id,
+        userId as string,
+        query,
+        schema
+      );
+
+      if (!result.success) {
+        return res.status(400).json(result);
+      }
+
+      res.status(200).json(result);
+    } catch (error: any) {
+      console.error('Execute SQL error:', error);
+
+      if (error.name === 'ZodError') {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid connection ID',
+          details: error.issues,
+        });
+      }
+
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error',
+      });
+    }
+  }
 }

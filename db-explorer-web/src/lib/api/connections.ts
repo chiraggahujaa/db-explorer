@@ -189,7 +189,15 @@ export interface TrainSchemaResponse {
 
 export interface SchemaCacheResponse {
   success: boolean;
-  data?: any;
+  data?: {
+    id: string;
+    connection_id: string;
+    schema_data: any;
+    last_trained_at?: string;
+    training_status?: string;
+    created_at: string;
+    updated_at: string;
+  };
   error?: string;
 }
 
@@ -204,9 +212,24 @@ export const schemaTrainingAPI = {
   },
 
   // Get schema cache status
-  getSchemaCache: async (connectionId: string): Promise<SchemaCacheResponse> => {
+  getSchemaCache: async (connectionId: string): Promise<any> => {
     const res = await api.get(`/api/connections/${connectionId}/schema-cache`);
-    return res.data;
+    const responseData = res.data;
+
+    // Transform snake_case to camelCase for frontend
+    if (responseData.data) {
+      return {
+        id: responseData.data.id,
+        connection_id: responseData.data.connection_id,
+        schemaData: responseData.data.schema_data,
+        lastTrainedAt: responseData.data.last_trained_at,
+        training_status: responseData.data.training_status,
+        created_at: responseData.data.created_at,
+        updated_at: responseData.data.updated_at,
+      };
+    }
+
+    return null;
   },
 
   // Delete schema cache
