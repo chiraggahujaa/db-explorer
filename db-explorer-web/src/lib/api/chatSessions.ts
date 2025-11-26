@@ -1,4 +1,5 @@
 import api from './axios';
+import type { ChatConfig } from '@/contexts/ConnectionExplorerContext';
 
 export interface ChatSession {
   id: string;
@@ -7,6 +8,7 @@ export interface ChatSession {
   title?: string;
   selectedSchema?: string;
   selectedTables?: string[];
+  chatConfig?: ChatConfig;
   aiProvider: 'gemini' | 'openai' | 'anthropic';
   lastMessageAt: string;
   createdAt: string;
@@ -33,6 +35,7 @@ export interface CreateChatSessionRequest {
   title?: string;
   selectedSchema?: string;
   selectedTables?: string[];
+  chatConfig?: ChatConfig;
   aiProvider?: 'gemini' | 'openai' | 'anthropic';
 }
 
@@ -40,6 +43,7 @@ export interface UpdateChatSessionRequest {
   title?: string;
   selectedSchema?: string;
   selectedTables?: string[];
+  chatConfig?: ChatConfig;
   connectionId?: string;
   aiProvider?: 'gemini' | 'openai' | 'anthropic';
 }

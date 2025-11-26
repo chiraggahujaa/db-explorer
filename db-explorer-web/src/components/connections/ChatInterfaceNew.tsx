@@ -8,7 +8,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls } from "ai";
-import { Send, Sparkles, Database, Loader2, Square, RefreshCw, ChevronDown, ChevronUp } from "lucide-react";
+import { Send, Sparkles, Database, Loader2, Square, RefreshCw, ChevronDown, ChevronUp, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import type { ConnectionWithRole } from "@/types/connection";
@@ -17,6 +17,8 @@ import { RetrainSchemaModal } from "./RetrainSchemaModal";
 import { ChatContextSummary } from "./ChatContextSummary";
 import { ContextIndicator } from "./ContextIndicator";
 import { ToolCallsSidebar } from "./ToolCallsSidebar";
+import { ChatConfigPopover } from "./ChatConfigPopover";
+import { SQLDisplay } from "./SQLDisplay";
 import { useMCPStore } from "@/stores/useMCPStore";
 import { useConnectionExplorer } from "@/contexts/ConnectionExplorerContext";
 import { toast } from "sonner";
@@ -26,6 +28,7 @@ import { getContextManager } from "@/utils/contextManager";
 interface ChatInterfaceNewProps {
   connection: ConnectionWithRole;
   chatSessionId?: string;
+  onNewChat?: () => void;
 }
 
 // Collapsible message component for long user messages
@@ -91,21 +94,67 @@ function getToolCalls(message: any): any[] {
   );
 }
 
-export function ChatInterfaceNew({ connection, chatSessionId }: ChatInterfaceNewProps) {
+// Helper to extract SQL from tool calls
+function extractSQLFromToolCalls(toolCalls: any[]): string[] {
+  const sqlQueries: string[] = [];
+
+  for (const toolCall of toolCalls) {
+    // Check if this is a query-related tool call
+    const toolName = toolCall.type?.replace('tool-', '') || toolCall.toolName;
+    const args = toolCall.args || {};
+
+    // Generate SQL based on tool type
+    if (toolName === 'select_data' && args.table && args.database) {
+      const columns = args.columns?.join(', ') || '*';
+      let sql = `SELECT ${columns} FROM \`${args.database}\`.\`${args.table}\``;
+      if (args.where) sql += ` WHERE ${args.where}`;
+      if (args.orderBy) sql += ` ORDER BY ${args.orderBy}`;
+      if (args.limit) sql += ` LIMIT ${args.limit}`;
+      if (args.offset) sql += ` OFFSET ${args.offset}`;
+      sqlQueries.push(sql);
+    } else if (toolName === 'execute_custom_query' && args.sql) {
+      sqlQueries.push(args.sql);
+    } else if (toolName === 'insert_record' && args.table && args.database && args.data) {
+      const columns = Object.keys(args.data).join(', ');
+      const values = Object.values(args.data).map((v: any) =>
+        typeof v === 'string' ? `'${v}'` : v
+      ).join(', ');
+      sqlQueries.push(`INSERT INTO \`${args.database}\`.\`${args.table}\` (${columns}) VALUES (${values})`);
+    } else if (toolName === 'update_record' && args.table && args.database && args.data && args.where) {
+      const setClause = Object.entries(args.data).map(([k, v]) =>
+        `${k} = ${typeof v === 'string' ? `'${v}'` : v}`
+      ).join(', ');
+      sqlQueries.push(`UPDATE \`${args.database}\`.\`${args.table}\` SET ${setClause} WHERE ${args.where}`);
+    } else if (toolName === 'delete_record' && args.table && args.database && args.where) {
+      sqlQueries.push(`DELETE FROM \`${args.database}\`.\`${args.table}\` WHERE ${args.where}`);
+    } else if (toolName === 'count_records' && args.table && args.database) {
+      let sql = `SELECT COUNT(*) FROM \`${args.database}\`.\`${args.table}\``;
+      if (args.where) sql += ` WHERE ${args.where}`;
+      sqlQueries.push(sql);
+    }
+  }
+
+  return sqlQueries;
+}
+
+export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatInterfaceNewProps) {
   const [input, setInput] = useState("");
   const [isRetrainModalOpen, setIsRetrainModalOpen] = useState(false);
   const [schemaError, setSchemaError] = useState<string | null>(null);
   const [isToolSidebarOpen, setIsToolSidebarOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const { chatConfig } = useConnectionExplorer();
   const titleGeneratedRef = useRef<boolean>(false);
 
   // Get sidebar selection context
   const { selectedSchema, selectedTables } = useConnectionExplorer();
 
-  // Use ref to always get latest selectedSchema value in dynamic body function
+  // Use ref to always get latest selectedSchema and chatConfig values in dynamic body function
   const selectedSchemaRef = useRef(selectedSchema);
   selectedSchemaRef.current = selectedSchema;
+  const chatConfigRef = useRef(chatConfig);
+  chatConfigRef.current = chatConfig;
 
   // Get chat session state from store
   const {
@@ -151,14 +200,16 @@ export function ChatInterfaceNew({ connection, chatSessionId }: ChatInterfaceNew
       },
       body: () => {
         // Dynamic body function - called for each request to get latest context
-        // Use ref to get the latest selectedSchema value
+        // Use ref to get the latest selectedSchema and chatConfig values
         const currentSchema = selectedSchemaRef.current;
+        const currentChatConfig = chatConfigRef.current;
 
 
         return {
           connectionId: connection.id,
           userId: connection.createdBy,
           selectedSchema: currentSchema,
+          chatConfig: currentChatConfig,
         };
       },
     }),
@@ -267,7 +318,8 @@ export function ChatInterfaceNew({ connection, chatSessionId }: ChatInterfaceNew
       const newSession = await createNewChat(
         connection.id,
         selectedSchema,
-        Array.from(selectedTables)
+        Array.from(selectedTables),
+        chatConfig
       );
 
       if (!newSession) {
@@ -318,6 +370,29 @@ export function ChatInterfaceNew({ connection, chatSessionId }: ChatInterfaceNew
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  if (onNewChat) {
+                    onNewChat();
+                  } else {
+                    // Fallback: Clear current chat state locally
+                    clearCurrentChat();
+                    setMessages([]);
+                    titleGeneratedRef.current = false;
+                  }
+                  toast.success('New session started', {
+                    description: 'Previous chat cleared. Start a fresh conversation.',
+                  });
+                }}
+                title="Start a new chat session without previous context"
+                className="gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                <span className="hidden sm:inline">New Session</span>
+              </Button>
+
               <Button
                 variant="outline"
                 size="sm"
@@ -460,6 +535,8 @@ export function ChatInterfaceNew({ connection, chatSessionId }: ChatInterfaceNew
               {/* Messages */}
               {messages.map((msg, index) => {
                 const messageText = getMessageText(msg);
+                const toolCalls = getToolCalls(msg);
+                const sqlQueries = chatConfig.showSQLGeneration ? extractSQLFromToolCalls(toolCalls) : [];
 
                 // Skip rendering if there's no text (only tool calls)
                 if (!messageText && msg.role === 'assistant') {
@@ -488,6 +565,14 @@ export function ChatInterfaceNew({ connection, chatSessionId }: ChatInterfaceNew
                           </div>
                         </div>
                         <div className="flex-1 min-w-0">
+                          {/* Show SQL if enabled */}
+                          {sqlQueries.length > 0 && (
+                            <div className="mb-2">
+                              {sqlQueries.map((sql, sqlIndex) => (
+                                <SQLDisplay key={sqlIndex} sql={sql} />
+                              ))}
+                            </div>
+                          )}
                           <div className="bg-card rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm border">
                             <MessageMarkdown content={messageText} />
                           </div>
@@ -542,7 +627,10 @@ export function ChatInterfaceNew({ connection, chatSessionId }: ChatInterfaceNew
       {/* Chat Input */}
       <div className="flex-shrink-0 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container max-w-4xl mx-auto px-2 py-4">
-          <form onSubmit={handleSubmit} className="flex gap-3 items-end">
+          <form onSubmit={handleSubmit} className="flex gap-2 items-end">
+            {/* Configuration Popover */}
+            <ChatConfigPopover />
+
             <div className="relative flex-1">
               <Textarea
                 value={input}

@@ -9,14 +9,23 @@ export interface QueryConfig {
   timeout?: number;
 }
 
+export interface ChatConfig {
+  readOnlyMode: boolean;
+  showSQLGeneration: boolean;
+  autoExecuteQueries: boolean;
+  resultRowLimit: number;
+}
+
 interface ConnectionExplorerContextType {
   selectedSchema: string | undefined;
   selectedTables: Set<string>;
   config: QueryConfig;
+  chatConfig: ChatConfig;
   setSelectedSchema: (schema: string | undefined) => void;
   toggleTable: (tableName: string) => void;
   clearSelectedTables: () => void;
   updateConfig: (updates: Partial<QueryConfig>) => void;
+  updateChatConfig: (updates: Partial<ChatConfig>) => void;
   reset: () => void;
 }
 
@@ -31,6 +40,13 @@ const defaultConfig: QueryConfig = {
   timeout: undefined,
 };
 
+const defaultChatConfig: ChatConfig = {
+  readOnlyMode: false,
+  showSQLGeneration: false,
+  autoExecuteQueries: true,
+  resultRowLimit: 100,
+};
+
 interface ConnectionExplorerProviderProps {
   children: ReactNode;
 }
@@ -39,6 +55,7 @@ export function ConnectionExplorerProvider({ children }: ConnectionExplorerProvi
   const [selectedSchema, setSelectedSchemaState] = useState<string | undefined>();
   const [selectedTables, setSelectedTables] = useState<Set<string>>(new Set());
   const [config, setConfig] = useState<QueryConfig>(defaultConfig);
+  const [chatConfig, setChatConfig] = useState<ChatConfig>(defaultChatConfig);
 
   const setSelectedSchema = useCallback((schema: string | undefined) => {
     setSelectedSchemaState(schema);
@@ -66,20 +83,27 @@ export function ConnectionExplorerProvider({ children }: ConnectionExplorerProvi
     setConfig((prev) => ({ ...prev, ...updates }));
   }, []);
 
+  const updateChatConfig = useCallback((updates: Partial<ChatConfig>) => {
+    setChatConfig((prev) => ({ ...prev, ...updates }));
+  }, []);
+
   const reset = useCallback(() => {
     setSelectedSchemaState(undefined);
     setSelectedTables(new Set());
     setConfig(defaultConfig);
+    setChatConfig(defaultChatConfig);
   }, []);
 
   const value: ConnectionExplorerContextType = {
     selectedSchema,
     selectedTables,
     config,
+    chatConfig,
     setSelectedSchema,
     toggleTable,
     clearSelectedTables,
     updateConfig,
+    updateChatConfig,
     reset,
   };
 

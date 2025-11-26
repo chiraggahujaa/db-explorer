@@ -2,11 +2,69 @@
 
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { useState } from 'react';
+import { Copy, Check } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/utils/ui';
 
 interface MessageMarkdownProps {
   content: string;
   className?: string;
+}
+
+// Code Block component with syntax highlighting and copy button
+function CodeBlock({ code, language }: { code: string; language: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (error) {
+      console.error('Failed to copy code:', error);
+    }
+  };
+
+  return (
+    <div className="relative group">
+      <div className="absolute right-2 top-2 z-10">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleCopy}
+          className="h-8 px-2 bg-background/80 backdrop-blur hover:bg-background"
+        >
+          {copied ? (
+            <>
+              <Check className="h-3 w-3 mr-1" />
+              <span className="text-xs">Copied!</span>
+            </>
+          ) : (
+            <>
+              <Copy className="h-3 w-3 mr-1" />
+              <span className="text-xs">Copy</span>
+            </>
+          )}
+        </Button>
+      </div>
+      <SyntaxHighlighter
+        language={language}
+        style={vscDarkPlus}
+        customStyle={{
+          margin: 0,
+          borderRadius: '0.5rem',
+          fontSize: '0.875rem',
+          padding: '1rem',
+        }}
+        PreTag="div"
+      >
+        {code}
+      </SyntaxHighlighter>
+    </div>
+  );
 }
 
 /**
@@ -42,8 +100,12 @@ export function MessageMarkdown({ content, className }: MessageMarkdownProps) {
             {children}
           </li>
         ),
-        // Customize code blocks
+        // Customize code blocks with syntax highlighting
         code: ({ node, inline, className, children, ...props }: any) => {
+          const match = /language-(\w+)/.exec(className || '');
+          const language = match ? match[1] : '';
+          const codeString = String(children).replace(/\n$/, '');
+
           if (inline) {
             return (
               <code
@@ -54,6 +116,12 @@ export function MessageMarkdown({ content, className }: MessageMarkdownProps) {
               </code>
             );
           }
+
+          // Use syntax highlighter for code blocks, especially SQL
+          if (language) {
+            return <CodeBlock code={codeString} language={language} />;
+          }
+
           return (
             <code
               className={cn(
@@ -68,9 +136,9 @@ export function MessageMarkdown({ content, className }: MessageMarkdownProps) {
         },
         // Customize pre blocks
         pre: ({ node, children, ...props }) => (
-          <pre className="bg-muted/50 dark:bg-muted/30 p-3 rounded-md overflow-x-auto my-2" {...props}>
+          <div className="relative my-2" {...props}>
             {children}
-          </pre>
+          </div>
         ),
         // Customize headings
         h1: ({ node, children, ...props }) => (

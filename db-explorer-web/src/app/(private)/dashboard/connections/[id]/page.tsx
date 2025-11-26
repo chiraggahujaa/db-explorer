@@ -148,6 +148,7 @@ export default function ConnectionExplorerPage() {
           <ChatInterface
             connection={connection}
             chatSessionId={activeChatSessionId}
+            onNewChat={handleNewChat}
           />
         </div>
       </div>

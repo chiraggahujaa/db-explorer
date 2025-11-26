@@ -70,7 +70,7 @@ interface MCPState {
   clearMCPState: (connectionId?: string) => void;
 
   // Chat session actions
-  createNewChat: (connectionId: string, schema?: string, tables?: string[]) => Promise<ChatSession | null>;
+  createNewChat: (connectionId: string, schema?: string, tables?: string[], chatConfig?: any) => Promise<ChatSession | null>;
   loadChatHistory: (chatSessionId: string) => Promise<void>;
   saveChatMessages: (userMessage: string, assistantMessage: string, toolCalls?: any) => Promise<void>;
   updateChatTitle: (title: string) => Promise<void>;
@@ -268,12 +268,13 @@ export const useMCPStore = create<MCPState>()(
         }),
 
       // Chat session methods
-      createNewChat: async (connectionId, schema, tables) => {
+      createNewChat: async (connectionId, schema, tables, chatConfig) => {
         try {
           const response = await chatSessionsAPI.createChatSession({
             connectionId,
             selectedSchema: schema,
             selectedTables: tables,
+            chatConfig: chatConfig,
           });
 
           if (response.success && response.data) {

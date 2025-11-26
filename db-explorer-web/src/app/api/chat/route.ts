@@ -52,17 +52,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const { messages, connectionId, userId, selectedSchema } = await req.json();
-
-    console.log('=== CHAT API REQUEST ===');
-    console.log('[Chat API] Connection ID:', connectionId);
-    console.log('[Chat API] User ID:', userId);
-    console.log('[Chat API] Selected Schema:', selectedSchema);
-    console.log('[Chat API] Schema Type:', typeof selectedSchema);
-    console.log('[Chat API] Schema is null?', selectedSchema === null);
-    console.log('[Chat API] Schema is undefined?', selectedSchema === undefined);
-    console.log('[Chat API] Message count:', messages?.length);
-    console.log('========================');
+    const { messages, connectionId, userId, selectedSchema, chatConfig } = await req.json();
 
     if (!connectionId || !userId) {
       return new Response(
@@ -104,8 +94,8 @@ export async function POST(req: Request) {
       console.log('[Chat API] No schema context, AI will discover schema dynamically');
     }
 
-    // Build comprehensive system prompt
-    const systemPrompt = getDatabaseAssistantPrompt(selectedSchema);
+    // Build comprehensive system prompt with chat config
+    const systemPrompt = getDatabaseAssistantPrompt(selectedSchema, chatConfig);
 
     // If we have trained schema data, append it to the prompt
     const fullSystemPrompt = schemaDataContext
@@ -305,6 +295,12 @@ export async function POST(req: Request) {
           connection: z.string().optional(),
         }),
         execute: async (input, options) => {
+          // Apply row limit from chat config if not specified or exceeds config limit
+          const configLimit = chatConfig?.resultRowLimit || 100;
+          const effectiveLimit = input.limit
+            ? Math.min(input.limit, configLimit)
+            : configLimit;
+
           const result = await executeDBQuery(connectionId, 'query', {
             query: {
               table: input.table,
@@ -312,7 +308,7 @@ export async function POST(req: Request) {
               columns: input.columns,
               where: input.where,
               orderBy: input.orderBy,
-              limit: input.limit,
+              limit: effectiveLimit,
               offset: input.offset,
             }
           }, accessToken, 'POST');
@@ -445,6 +441,11 @@ export async function POST(req: Request) {
           connection: z.string().optional(),
         }),
         execute: async (input, options) => {
+          // Check read-only mode
+          if (chatConfig?.readOnlyMode) {
+            throw new Error('Data modification is not allowed in read-only mode. Please disable read-only mode in chat configuration to perform INSERT operations.');
+          }
+
           const columns = Object.keys(input.data).join(', ');
           const values = Object.values(input.data).map(v =>
             typeof v === 'string' ? `'${v}'` : v
@@ -469,6 +470,11 @@ export async function POST(req: Request) {
           connection: z.string().optional(),
         }),
         execute: async (input, options) => {
+          // Check read-only mode
+          if (chatConfig?.readOnlyMode) {
+            throw new Error('Data modification is not allowed in read-only mode. Please disable read-only mode in chat configuration to perform UPDATE operations.');
+          }
+
           const setClause = Object.entries(input.data).map(([k, v]) =>
             `${k} = ${typeof v === 'string' ? `'${v}'` : v}`
           ).join(', ');
@@ -491,6 +497,11 @@ export async function POST(req: Request) {
           connection: z.string().optional(),
         }),
         execute: async (input, options) => {
+          // Check read-only mode
+          if (chatConfig?.readOnlyMode) {
+            throw new Error('Data modification is not allowed in read-only mode. Please disable read-only mode in chat configuration to perform DELETE operations.');
+          }
+
           if (!input.where) {
             throw new Error('WHERE clause is required for DELETE operations (safety check)');
           }
@@ -513,6 +524,11 @@ export async function POST(req: Request) {
           connection: z.string().optional(),
         }),
         execute: async (input, options) => {
+          // Check read-only mode
+          if (chatConfig?.readOnlyMode) {
+            throw new Error('Data modification is not allowed in read-only mode. Please disable read-only mode in chat configuration to perform bulk INSERT operations.');
+          }
+
           if (input.data.length === 0) {
             throw new Error('No data provided for bulk insert');
           }
