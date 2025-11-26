@@ -51,7 +51,7 @@ export default function Header() {
   return (
     <header
       data-scrolled={scrolled}
-      className="fixed top-0 inset-x-0 z-50 transition-all data-[scrolled=true]:bg-background/80 data-[scrolled=true]:backdrop-blur supports-[backdrop-filter]:data-[scrolled=true]:bg-background/60 border-b border-transparent data-[scrolled=true]:border-border"
+      className="fixed top-0 inset-x-0 z-50 transition-all bg-background/80 backdrop-blur-md supports-[backdrop-filter]:bg-background/60 border-b border-border/40 data-[scrolled=true]:border-border/80 shadow-sm"
     >
       <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between gap-3">
