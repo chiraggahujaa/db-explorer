@@ -5,7 +5,7 @@
  * Handles job creation, status tracking, cancellation, and worker registration
  */
 
-import PgBoss from 'pg-boss';
+import { PgBoss } from 'pg-boss';
 import {
   Job,
   JobData,
@@ -349,6 +349,21 @@ export class JobService {
   }
 
   /**
+   * Create a queue (required in pg-boss v10+ before registering workers)
+   */
+  async createQueue(queueName: JobType): Promise<void> {
+    this.ensureInitialized();
+
+    try {
+      await this.boss!.createQueue(queueName);
+      console.log(`Queue created: ${queueName}`);
+    } catch (error) {
+      console.error(`Error creating queue ${queueName}:`, error);
+      throw error;
+    }
+  }
+
+  /**
    * Register a job worker/handler
    */
   async work<T = any, R = any>(
@@ -359,6 +374,9 @@ export class JobService {
     this.ensureInitialized();
 
     try {
+      // Create queue first (required in pg-boss v10+)
+      await this.createQueue(jobName);
+
       const workerOptions: PgBoss.WorkOptions = {
         teamSize: options?.teamSize || 3,
         teamConcurrency: options?.teamConcurrency || 1,
