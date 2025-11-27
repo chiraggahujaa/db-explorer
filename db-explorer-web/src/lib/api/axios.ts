@@ -43,14 +43,23 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
-    // Handle 401 errors (unauthorized)
-    if (
-      error.response?.status === 401 &&
+    // Handle 401 and 403 errors (unauthorized or expired token)
+    const shouldRetryWithRefresh =
+      (error.response?.status === 401 || error.response?.status === 403) &&
       !originalRequest._retry &&
       // Do not try to refresh for the refresh endpoint itself
       typeof originalRequest?.url === 'string' &&
-      !originalRequest.url.includes('/api/auth/refresh')
-    ) {
+      !originalRequest.url.includes('/api/auth/refresh') &&
+      // Only refresh for auth-related 403 errors (expired/invalid token)
+      (error.response?.status === 401 ||
+       (error.response?.status === 403 &&
+        typeof error.response?.data?.error === 'string' &&
+        (error.response.data.error.toLowerCase().includes('expired') ||
+         error.response.data.error.toLowerCase().includes('invalid'))
+       )
+      );
+
+    if (shouldRetryWithRefresh) {
       originalRequest._retry = true;
 
       // Try to refresh token
@@ -66,7 +75,7 @@ api.interceptors.response.use(
 
           if (response.data.success) {
             const { access_token, refresh_token } = response.data.data.session;
-            
+
             // Store new tokens
             if (typeof window !== 'undefined') {
               localStorage.setItem('access_token', access_token);
@@ -77,15 +86,19 @@ api.interceptors.response.use(
             originalRequest.headers.Authorization = `Bearer ${access_token}`;
             return api(originalRequest);
           }
-        } catch {
-          // Refresh failed, clear tokens and redirect to login
+        } catch (refreshError) {
+          // Refresh failed, clear tokens and let AuthGuard handle redirect
           if (typeof window !== 'undefined') {
             localStorage.removeItem('access_token');
             localStorage.removeItem('refresh_token');
             sessionStorage.removeItem('access_token');
             sessionStorage.removeItem('refresh_token');
+
+            // Clear user state from store
+            const { useAppStore } = await import('@/stores/useAppStore');
+            useAppStore.getState().logout();
           }
-          
+
           console.log('Token refresh failed, letting AuthGuard handle redirect');
         }
       }
