@@ -23,7 +23,7 @@ import { cn } from "@/utils/ui";
 import { toast } from "sonner";
 import { useConnectionExplorer } from "@/contexts/ConnectionExplorerContext";
 import { ChatHistoryList } from "./ChatHistoryList";
-import { useMCPStore } from "@/stores/useMCPStore";
+import { useChatStore } from "@/stores/useChatStore";
 
 type SidebarView = "database" | "recents";
 
@@ -57,7 +57,7 @@ export function ExplorerSidebar({
 
   // Get the current chat session ID from the store
   // We'll use this to exclude newly created sessions from the history when in "new chat" view
-  const currentChatSessionIdFromStore = useMCPStore((state) => state.currentChatSessionId);
+  const currentChatSessionIdFromStore = useChatStore((state) => state.currentChatSessionId);
 
   const [activeView, setActiveView] = useState<SidebarView>("database");
   const [tableFilter, setTableFilter] = useState("");

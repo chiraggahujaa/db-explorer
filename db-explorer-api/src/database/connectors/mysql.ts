@@ -1,5 +1,5 @@
 // MySQL Database Connector
-// Adapted from db-mcp for Node.js using mysql2 library
+// Database connector for Node.js using mysql2 library
 
 import mysql from 'mysql2/promise';
 import { BaseDatabaseConnection, type DatabaseConfig, type QueryResult } from './base.js';

@@ -1,5 +1,5 @@
 // Base Database Connection Interface
-// Adapted from db-mcp for Node.js
+// Database connector for Node.js
 
 export interface DatabaseConfig {
   type: 'mysql' | 'postgresql' | 'sqlite' | 'supabase';

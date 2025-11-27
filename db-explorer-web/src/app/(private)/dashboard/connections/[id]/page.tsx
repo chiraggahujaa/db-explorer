@@ -8,8 +8,7 @@ import { LoadingSpinner } from "@/components/common/LoadingSpinner";
 import { ExplorerSidebar } from "@/components/connections/ExplorerSidebar";
 import { ChatInterfaceNew as ChatInterface } from "@/components/connections/ChatInterfaceNew";
 import { ConnectionExplorerProvider } from "@/contexts/ConnectionExplorerContext";
-import { getClaudeService } from "@/services/ClaudeService";
-import { useMCPStore } from "@/stores/useMCPStore";
+import { useChatStore } from "@/stores/useChatStore";
 
 export default function ConnectionExplorerPage() {
   const params = useParams();
@@ -55,25 +54,15 @@ export default function ConnectionExplorerPage() {
     }
 
     try {
-      const claudeService = getClaudeService();
-      claudeService.clearHistory();
+      // Clear current chat state
+      useChatStore.getState().clearCurrentChat();
     } catch (error) {
-      console.warn("[ConnectionExplorerPage] Unable to clear Claude history:", error);
-    }
-
-    try {
-      // Clear only the streaming messages and permissions, not the MCP connection itself
-      useMCPStore.getState().clearMCPState(connectionId);
-      useMCPStore.getState().clearCurrentChat();
-    } catch (error) {
-      console.error("[ConnectionExplorerPage] Failed to clear MCP state:", error);
+      console.error("[ConnectionExplorerPage] Failed to clear chat state:", error);
     }
 
     // Clear chatId from URL - this will trigger ChatInterface to start fresh
     router.push(`/dashboard/connections/${connectionId}`);
     setActiveChatSessionId(undefined);
-    // Don't remount - just let the URL change trigger the reset
-    // setChatSessionKey((prev) => prev + 1);
   }, [connectionId, router]);
 
   const handleSelectChat = useCallback((chatSessionId: string) => {

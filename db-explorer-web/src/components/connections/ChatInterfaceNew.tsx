@@ -19,7 +19,7 @@ import { ContextIndicator } from "./ContextIndicator";
 import { ToolCallsSidebar } from "./ToolCallsSidebar";
 import { ChatConfigPopover } from "./ChatConfigPopover";
 import { SQLDisplay } from "./SQLDisplay";
-import { useMCPStore } from "@/stores/useMCPStore";
+import { useChatStore } from "@/stores/useChatStore";
 import { useConnectionExplorer } from "@/contexts/ConnectionExplorerContext";
 import { toast } from "sonner";
 import { cn } from "@/utils/ui";
@@ -166,7 +166,7 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
     saveChatMessages,
     generateChatTitle,
     clearCurrentChat,
-  } = useMCPStore();
+  } = useChatStore();
 
   // Calculate context window status
   const contextManager = getContextManager();
@@ -274,7 +274,7 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
         await loadChatHistory(chatSessionId);
 
         // Load history into useChat
-        const { chatHistory: loadedHistory } = useMCPStore.getState();
+        const { chatHistory: loadedHistory } = useChatStore.getState();
         if (loadedHistory && loadedHistory.length > 0) {
           // Convert to UIMessage format
           const uiMessages = loadedHistory.map((msg: any) => ({

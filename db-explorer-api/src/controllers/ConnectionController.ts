@@ -97,7 +97,7 @@ export class ConnectionController {
   }
 
   /**
-   * Get full connection config with credentials (for MCP initialization)
+   * Get full connection config with credentials (for AI chat initialization)
    * GET /api/connections/:id/credentials
    * TODO: This currently returns raw DB credentials (including passwords);
    *       we should replace this with a safer mechanism that doesn't send

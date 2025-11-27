@@ -1,5 +1,5 @@
 // Supabase Database Connector
-// Adapted from db-mcp for Node.js using fetch API
+// Database connector for Node.js using fetch API
 
 import { BaseDatabaseConnection, type DatabaseConfig, type QueryResult } from './base.js';
 

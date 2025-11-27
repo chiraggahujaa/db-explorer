@@ -1,5 +1,5 @@
 // PostgreSQL Database Connector
-// Adapted from db-mcp for Node.js using pg library
+// Database connector for Node.js using pg library
 
 import { Pool, Client } from 'pg';
 import { BaseDatabaseConnection, type DatabaseConfig, type QueryResult } from './base.js';
