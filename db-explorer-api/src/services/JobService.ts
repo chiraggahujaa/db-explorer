@@ -33,7 +33,7 @@ const JOB_RETRY_CONFIG: Record<JobType, Partial<JobOptions>> = {
     retryLimit: 3,
     retryDelay: 60,        // 1 minute
     retryBackoff: true,    // Exponential backoff: 1min, 2min, 4min
-    expireInSeconds: 86400, // 24 hours
+    expireInSeconds: 86340, // 23 hours 59 minutes (pg-boss max is < 24 hours)
   },
   'data-export': {
     retryLimit: 2,
@@ -57,7 +57,7 @@ const JOB_RETRY_CONFIG: Record<JobType, Partial<JobOptions>> = {
     retryLimit: 3,
     retryDelay: 120,
     retryBackoff: true,
-    expireInSeconds: 86400,
+    expireInSeconds: 86340, // 23 hours 59 minutes (pg-boss max is < 24 hours)
   },
 };
 
@@ -389,51 +389,59 @@ export class JobService {
       const workerOptions: WorkOptions = {
         pollingIntervalSeconds: options?.newJobCheckIntervalSeconds || 2,
         batchSize: options?.teamSize || 3,
-        includeMetadata: false,
+        includeMetadata: true,
       };
 
-      await this.boss!.work(jobName, workerOptions, async (job: any) => {
-        console.log(`Processing job: ${job.id} (type: ${jobName})`);
+      await this.boss!.work(jobName, workerOptions, async (jobs: any[]) => {
+        // pg-boss with includeMetadata: true passes an array of jobs
+        // We process them one at a time
+        const results = [];
 
-        try {
-          // Emit job started event
-          this.emitEvent('job:started', {
-            jobId: job.id,
-            type: jobName,
-            event: 'started',
-            userId: job.data?.userId,
-            timestamp: new Date(),
-          });
+        for (const job of jobs) {
+          console.log(`Processing job: ${job.id} (type: ${jobName})`);
 
-          // Execute handler
-          const result = await handler(job);
+          try {
+            // Emit job started event
+            this.emitEvent('job:started', {
+              jobId: job.id,
+              type: jobName,
+              event: 'started',
+              userId: job.data?.userId,
+              timestamp: new Date(),
+            });
 
-          // Emit job completed event
-          this.emitEvent('job:completed', {
-            jobId: job.id,
-            type: jobName,
-            event: 'completed',
-            userId: job.data?.userId,
-            result,
-            timestamp: new Date(),
-          });
+            // Execute handler
+            const result = await handler(job);
 
-          return result;
-        } catch (error: any) {
-          console.error(`Job ${job.id} failed:`, error);
+            // Emit job completed event
+            this.emitEvent('job:completed', {
+              jobId: job.id,
+              type: jobName,
+              event: 'completed',
+              userId: job.data?.userId,
+              result,
+              timestamp: new Date(),
+            });
 
-          // Emit job failed event
-          this.emitEvent('job:failed', {
-            jobId: job.id,
-            type: jobName,
-            event: 'failed',
-            userId: job.data?.userId,
-            error: error.message,
-            timestamp: new Date(),
-          });
+            results.push(result);
+          } catch (error: any) {
+            console.error(`Job ${job.id} failed:`, error);
 
-          throw error;
+            // Emit job failed event
+            this.emitEvent('job:failed', {
+              jobId: job.id,
+              type: jobName,
+              event: 'failed',
+              userId: job.data?.userId,
+              error: error.message,
+              timestamp: new Date(),
+            });
+
+            throw error;
+          }
         }
+
+        return results.length === 1 ? results[0] : results;
       });
 
       console.log(`Worker registered for job type: ${jobName}`);
