@@ -71,6 +71,12 @@ export class ChatMessageService extends BaseService {
         throw new Error(`Database error: ${error.message}`);
       }
 
+      // Update the chat session's last_message_at timestamp
+      await supabaseAdmin
+        .from('chat_sessions')
+        .update({ last_message_at: new Date().toISOString() })
+        .eq('id', messageData.chatSessionId);
+
       return {
         success: true,
         data: DataMapper.toCamelCase(result) as ChatMessage,
@@ -295,6 +301,15 @@ export class ChatMessageService extends BaseService {
 
       if (error) {
         throw new Error(`Database error: ${error.message}`);
+      }
+
+      // Update last_message_at for all affected chat sessions
+      const chatSessionIds = [...new Set(messages.map(msg => msg.chatSessionId))];
+      for (const chatSessionId of chatSessionIds) {
+        await supabaseAdmin
+          .from('chat_sessions')
+          .update({ last_message_at: new Date().toISOString() })
+          .eq('id', chatSessionId);
       }
 
       return {

@@ -21,6 +21,7 @@ import { ChatConfigPopover } from "./ChatConfigPopover";
 import { SQLDisplay } from "./SQLDisplay";
 import { useMCPStore } from "@/stores/useMCPStore";
 import { useConnectionExplorer } from "@/contexts/ConnectionExplorerContext";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { cn } from "@/utils/ui";
 import { getContextManager } from "@/utils/contextManager";
@@ -146,6 +147,7 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const { chatConfig } = useConnectionExplorer();
   const titleGeneratedRef = useRef<boolean>(false);
+  const queryClient = useQueryClient();
 
   // Get sidebar selection context
   const { selectedSchema, selectedTables } = useConnectionExplorer();
@@ -234,21 +236,34 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
     },
     onFinish: async ({ message }) => {
       console.log('[ChatInterface] Message completed:', message);
+      console.log('[ChatInterface] Current messages array length:', messages.length);
+      console.log('[ChatInterface] Current chat session ID:', currentChatSessionId);
 
       // Save to chat history
       if (currentChatSessionId && messages.length > 0) {
-        // Get the user message (should be the last message before the assistant response)
+        // Get the user message that triggered this response
+        // At this point, messages array has: [...previous messages, current user message]
+        // The assistant response (message param) is not yet in the messages array
         const userMessage = messages[messages.length - 1];
         const userText = getMessageText(userMessage);
         const assistantText = getMessageText(message);
 
+        console.log('[ChatInterface] Saving messages - User:', userText.substring(0, 50), 'Assistant:', assistantText.substring(0, 50));
+
         // Save both messages
         await saveChatMessages(userText, assistantText);
 
+        // Invalidate chat history query to refresh the sidebar
+        queryClient.invalidateQueries({ queryKey: ["chat-sessions", connection.id] });
+
         // Generate title for first exchange if needed
+        // Check if this is the first exchange (messages.length === 1 means only the user message is in the array)
         if (!titleGeneratedRef.current && messages.length === 1) {
+          console.log('[ChatInterface] Generating title for first exchange');
           await generateChatTitle(userText);
           titleGeneratedRef.current = true;
+          // Invalidate again after title is generated to update the sidebar with the new title
+          queryClient.invalidateQueries({ queryKey: ["chat-sessions", connection.id] });
         }
       }
     },
