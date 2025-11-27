@@ -8,7 +8,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls } from "ai";
-import { Send, Sparkles, Database, Loader2, Square, RefreshCw, ChevronDown, ChevronUp, Plus } from "lucide-react";
+import { Send, Sparkles, Database, Loader2, Square, RefreshCw, ChevronDown, ChevronUp, Plus, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import type { ConnectionWithRole } from "@/types/connection";
@@ -421,6 +421,14 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
                   maxTokens={contextManager.getConfig().maxTokens}
                   messageCount={chatHistory.length}
                 />
+              )}
+
+              {/* Incognito Mode Indicator */}
+              {chatConfig.incognitoMode && (
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-orange-100 dark:bg-orange-900/30 border border-orange-200 dark:border-orange-800">
+                  <EyeOff className="w-3 h-3 text-orange-600 dark:text-orange-400" />
+                  <span className="text-xs font-medium text-orange-700 dark:text-orange-400">Incognito</span>
+                </div>
               )}
 
               {/* Connection Status */}

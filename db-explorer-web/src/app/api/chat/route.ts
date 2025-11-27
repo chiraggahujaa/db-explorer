@@ -985,6 +985,39 @@ export async function POST(req: Request) {
       }),
     };
 
+    // Filter tools based on incognito mode
+    if (chatConfig?.incognitoMode) {
+      console.log('[Chat API] Incognito mode ENABLED - filtering tools to metadata-only');
+
+      // Allowed tools in incognito mode (schema/metadata only)
+      const allowedTools = [
+        'list_databases',
+        'list_tables',
+        'describe_table',
+        'show_indexes',
+        'analyze_foreign_keys',
+        'get_table_dependencies',
+        'analyze_table_relationships',
+        'test_connection',
+        'show_connections',
+        'backup_table_structure',
+        'get_database_size',
+      ];
+
+      // Filter systemConfig.tools to only include allowed tools
+      const filteredTools: any = {};
+      for (const toolName of allowedTools) {
+        if (systemConfig.tools[toolName]) {
+          filteredTools[toolName] = systemConfig.tools[toolName];
+        }
+      }
+
+      systemConfig.tools = filteredTools;
+      console.log('[Chat API] Incognito mode: Allowed tools:', Object.keys(filteredTools));
+    } else {
+      console.log('[Chat API] Incognito mode DISABLED - all tools available');
+    }
+
     // Stream the response with UI message format for useChat hook
     const result = await streamText(systemConfig);
     return result.toUIMessageStreamResponse({

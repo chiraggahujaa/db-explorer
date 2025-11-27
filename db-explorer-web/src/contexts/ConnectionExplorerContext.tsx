@@ -1,6 +1,7 @@
 "use client";
 
-import React, { createContext, useContext, useState, useCallback, ReactNode } from "react";
+import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode } from "react";
+import { useIncognito } from "./IncognitoContext";
 
 export interface QueryConfig {
   readOnly: boolean;
@@ -14,6 +15,7 @@ export interface ChatConfig {
   showSQLGeneration: boolean;
   autoExecuteQueries: boolean;
   resultRowLimit: number;
+  incognitoMode: boolean;
 }
 
 interface ConnectionExplorerContextType {
@@ -45,6 +47,7 @@ const defaultChatConfig: ChatConfig = {
   showSQLGeneration: false,
   autoExecuteQueries: true,
   resultRowLimit: 100,
+  incognitoMode: false,
 };
 
 interface ConnectionExplorerProviderProps {
@@ -52,10 +55,16 @@ interface ConnectionExplorerProviderProps {
 }
 
 export function ConnectionExplorerProvider({ children }: ConnectionExplorerProviderProps) {
+  const { incognitoMode } = useIncognito();
   const [selectedSchema, setSelectedSchemaState] = useState<string | undefined>();
   const [selectedTables, setSelectedTables] = useState<Set<string>>(new Set());
   const [config, setConfig] = useState<QueryConfig>(defaultConfig);
   const [chatConfig, setChatConfig] = useState<ChatConfig>(defaultChatConfig);
+
+  // Sync global incognito mode with chat config
+  useEffect(() => {
+    setChatConfig((prev) => ({ ...prev, incognitoMode }));
+  }, [incognitoMode]);
 
   const setSelectedSchema = useCallback((schema: string | undefined) => {
     setSelectedSchemaState(schema);
