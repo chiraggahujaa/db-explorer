@@ -1,6 +1,7 @@
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import * as dotenv from 'dotenv';
+import http from 'http';
 
 // Import routes
 import authRoutes from './routes/auth.js';
@@ -9,6 +10,8 @@ import fileRoutes from './routes/files.js';
 import connectionRoutes from './routes/connections.js';
 import invitationRoutes from './routes/invitations.js';
 import chatSessionRoutes from './routes/chatSessions.js';
+import jobRoutes from './routes/jobs.js';
+import notificationRoutes from './routes/notifications.js';
 
 // Import middleware
 import {
@@ -29,6 +32,9 @@ import {
 
 // Import services
 import { schemaTrainingScheduler } from './services/SchemaTrainingScheduler.js';
+import { jobService } from './services/JobService.js';
+import { webSocketService } from './services/WebSocketService.js';
+import { registerAllWorkers } from './workers/index.js';
 
 const environment = process.env.NODE_ENV || 'development';
 console.log(`Loading environment: ${environment}`);
@@ -88,6 +94,8 @@ app.use('/api/files', uploadRateLimit, fileRoutes);
 app.use('/api/connections', apiRateLimit, connectionRoutes);
 app.use('/api/invitations', apiRateLimit, invitationRoutes);
 app.use('/api/chat-sessions', apiRateLimit, chatSessionRoutes);
+app.use('/api/jobs', apiRateLimit, jobRoutes);
+app.use('/api/notifications', apiRateLimit, notificationRoutes);
 
 // 404 handler - must be after all routes
 app.use((req: Request, res: Response) => {
@@ -101,48 +109,96 @@ app.use((req: Request, res: Response) => {
 // Error handling middleware - must be last
 app.use(errorHandler);
 
+// Create HTTP server (needed for Socket.IO)
+const server = http.createServer(app);
+
+// Initialize services
+async function initializeServices() {
+  try {
+    console.log('🔧 Initializing services...');
+
+    // Initialize Job Service (pg-boss)
+    console.log('📦 Initializing job queue...');
+    await jobService.initialize();
+    console.log('✅ Job queue initialized');
+
+    // Register job workers
+    console.log('👷 Registering job workers...');
+    await registerAllWorkers();
+    console.log('✅ Job workers registered');
+
+    // Initialize WebSocket Service
+    console.log('🔌 Initializing WebSocket service...');
+    webSocketService.initialize(server);
+    console.log('✅ WebSocket service initialized');
+
+    // Start schema training scheduler
+    // Default: Every Sunday at 2:00 AM
+    // Can be overridden with SCHEMA_TRAINING_CRON env variable
+    const cronExpression = process.env.SCHEMA_TRAINING_CRON || '0 2 * * 0';
+    schemaTrainingScheduler.start(cronExpression);
+    console.log(`📅 Schema training scheduler started (cron: ${cronExpression})`);
+
+    console.log('✅ All services initialized successfully');
+  } catch (error) {
+    console.error('❌ Failed to initialize services:', error);
+    process.exit(1);
+  }
+}
+
 // Start server
-const server = app.listen(PORT, () => {
+server.listen(PORT, async () => {
   const env = process.env.NODE_ENV || 'development';
-  
+
   let baseUrl;
   if (env === 'production') {
     baseUrl = process.env.RAILWAY_PUBLIC_DOMAIN;
   } else {
     baseUrl = `http://localhost:${PORT}`;
   }
-  
+
   console.log(`🚀 DB Explorer API Server is running on port ${PORT}`);
   console.log(`📊 Environment: ${env}`);
   console.log(`🌐 Health check: ${baseUrl}/health`);
   console.log(`📖 API Base URL: ${baseUrl}/api`);
+  console.log(`🔌 WebSocket URL: ${baseUrl}`);
 
-  // Start schema training scheduler
-  // Default: Every Sunday at 2:00 AM
-  // Can be overridden with SCHEMA_TRAINING_CRON env variable
-  const cronExpression = process.env.SCHEMA_TRAINING_CRON || '0 2 * * 0';
-  schemaTrainingScheduler.start(cronExpression);
-  console.log(`📅 Schema training scheduler started (cron: ${cronExpression})`);
+  // Initialize services after server starts
+  await initializeServices();
 });
 
 // Graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('SIGTERM received, shutting down gracefully...');
-  schemaTrainingScheduler.stop();
-  server.close(() => {
-    console.log('HTTP server closed');
-    process.exit(0);
-  });
-});
+async function shutdown(signal: string) {
+  console.log(`${signal} received, shutting down gracefully...`);
 
-process.on('SIGINT', () => {
-  console.log('SIGINT received, shutting down gracefully...');
-  schemaTrainingScheduler.stop();
-  server.close(() => {
-    console.log('HTTP server closed');
+  try {
+    // Stop accepting new connections
+    server.close(() => {
+      console.log('HTTP server closed');
+    });
+
+    // Stop schema training scheduler
+    console.log('Stopping schema training scheduler...');
+    schemaTrainingScheduler.stop();
+
+    // Stop job service (wait for active jobs to complete)
+    console.log('Stopping job service...');
+    await jobService.stop();
+
+    // Close WebSocket connections
+    console.log('Closing WebSocket connections...');
+    await webSocketService.close();
+
+    console.log('✅ Graceful shutdown complete');
     process.exit(0);
-  });
-});
+  } catch (error) {
+    console.error('Error during shutdown:', error);
+    process.exit(1);
+  }
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
 // Handle server errors
 server.on('error', (error: any) => {

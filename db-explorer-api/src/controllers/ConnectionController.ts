@@ -1081,4 +1081,73 @@ export class ConnectionController {
       });
     }
   }
+
+  /**
+   * Trigger schema rebuild as async job
+   * POST /api/connections/:id/rebuild
+   */
+  async rebuildSchema(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          error: 'User not authenticated',
+        });
+      }
+
+      const { id } = req.params;
+      uuidSchema.parse(id);
+
+      const { force = false } = req.body;
+
+      // Verify user has access to this connection
+      const connection = await this.connectionService.findById(id);
+      if (!connection.success || !connection.data) {
+        return res.status(404).json({
+          success: false,
+          error: 'Connection not found',
+        });
+      }
+
+      // Import jobService dynamically to avoid circular dependency
+      const { jobService } = await import('../services/JobService.js');
+
+      // Create job for schema rebuild
+      const jobId = await jobService.createJob(
+        'schema-rebuild',
+        {
+          connectionId: id,
+          userId,
+          force,
+        },
+        {
+          singletonKey: `schema-rebuild-${id}`, // Prevent duplicate rebuilds for same connection
+        }
+      );
+
+      res.status(202).json({
+        success: true,
+        data: {
+          jobId,
+          message: 'Schema rebuild job queued successfully',
+        },
+      });
+    } catch (error: any) {
+      console.error('Rebuild schema error:', error);
+
+      if (error.name === 'ZodError') {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid connection ID',
+          details: error.issues,
+        });
+      }
+
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error',
+      });
+    }
+  }
 }
