@@ -23,9 +23,15 @@ export async function registerSchemaRebuildWorker(): Promise<void> {
     'schema-rebuild',
     async (job) => {
       const startTime = Date.now();
-      const { connectionId, userId, force } = job.data;
+      const { connectionId, userId, force, schemas, config } = job.data;
 
       console.log(`[Job ${job.id}] Starting schema rebuild for connection ${connectionId}`);
+      if (schemas && schemas.length > 0) {
+        console.log(`[Job ${job.id}] Selective training: ${schemas.length} schema(s) selected`);
+      }
+      if (config) {
+        console.log(`[Job ${job.id}] Custom config:`, config);
+      }
 
       try {
         // Step 1: Validate connection (10%)

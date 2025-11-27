@@ -6,6 +6,10 @@
  */
 
 import { PgBoss } from 'pg-boss';
+import type {
+  SendOptions,
+  WorkOptions,
+} from 'pg-boss';
 import {
   Job,
   JobData,
@@ -92,11 +96,8 @@ export class JobService {
       this.boss = new PgBoss({
         connectionString: connString,
         schema: process.env.PGBOSS_SCHEMA || 'pgboss',
-        archiveCompletedAfterSeconds: parseInt(process.env.PGBOSS_ARCHIVE_COMPLETED_AFTER_SECONDS || '86400', 10), // 24 hours
-        deleteArchivedAfterDays: parseInt(process.env.PGBOSS_DELETE_ARCHIVED_AFTER_DAYS || '30', 10),
-        retentionDays: parseInt(process.env.PGBOSS_RETENTION_DAYS || '7', 10),
         maintenanceIntervalSeconds: 300, // Run maintenance every 5 minutes
-        onComplete: true, // Enable completion monitoring
+        monitorIntervalSeconds: 10, // Monitor queue states every 10 seconds
       });
 
       // Set up error handlers
@@ -104,17 +105,11 @@ export class JobService {
         console.error('pg-boss error:', error);
       });
 
-      this.boss.on('monitor-states', (states: any) => {
-        // Log queue states for monitoring
-        console.log('Job queue states:', {
-          created: states.created,
-          retry: states.retry,
-          active: states.active,
-          completed: states.completed,
-          failed: states.failed,
-          cancelled: states.cancelled,
-        });
-      });
+      // Note: monitor-states event may not exist in pg-boss v12
+      // Commented out for now
+      // this.boss.on('monitor-states', (states: any) => {
+      //   console.log('Job queue states:', states);
+      // });
 
       // Start pg-boss
       await this.boss.start();
@@ -181,15 +176,14 @@ export class JobService {
       const jobOptions = { ...defaultConfig, ...options };
 
       // Convert to pg-boss options format
-      const pgBossOptions: PgBoss.SendOptions = {
-        priority: jobOptions.priority,
-        retryLimit: jobOptions.retryLimit,
-        retryDelay: jobOptions.retryDelay,
-        retryBackoff: jobOptions.retryBackoff,
-        expireInSeconds: jobOptions.expireInSeconds,
-        singletonKey: jobOptions.singletonKey,
-        startAfter: jobOptions.startAfter as any,
-      };
+      const pgBossOptions: SendOptions = {};
+      if (jobOptions.priority !== undefined) pgBossOptions.priority = jobOptions.priority;
+      if (jobOptions.retryLimit !== undefined) pgBossOptions.retryLimit = jobOptions.retryLimit;
+      if (jobOptions.retryDelay !== undefined) pgBossOptions.retryDelay = jobOptions.retryDelay;
+      if (jobOptions.retryBackoff !== undefined) pgBossOptions.retryBackoff = jobOptions.retryBackoff;
+      if (jobOptions.expireInSeconds !== undefined) pgBossOptions.expireInSeconds = jobOptions.expireInSeconds;
+      if (jobOptions.singletonKey !== undefined) pgBossOptions.singletonKey = jobOptions.singletonKey;
+      if (jobOptions.startAfter !== undefined) pgBossOptions.startAfter = jobOptions.startAfter as any;
 
       // Send job to queue
       const jobId = await this.boss!.send(type, payload, pgBossOptions);
@@ -218,13 +212,26 @@ export class JobService {
 
   /**
    * Get job by ID
+   * Note: In pg-boss v12+, we need the queue name to get a job
+   * For now, we'll try common queue names or query all queues
    */
   async getJob(jobId: string): Promise<JobWithMetadata | null> {
     this.ensureInitialized();
 
     try {
-      const job = await this.boss!.getJobById(jobId);
-      return job ? this.mapJob(job) : null;
+      // Try all known job types
+      for (const jobType of ['schema-rebuild', 'data-export', 'bulk-import', 'analytics-report', 'backup-connection'] as JobType[]) {
+        try {
+          const job = await this.boss!.getJobById(jobType, jobId);
+          if (job) {
+            return this.mapJob(job);
+          }
+        } catch (error) {
+          // Continue to next job type
+          continue;
+        }
+      }
+      return null;
     } catch (error) {
       console.error('Error getting job:', error);
       return null;
@@ -250,12 +257,12 @@ export class JobService {
 
       if (states) {
         for (const state of states) {
-          const jobs = await this.boss!.fetch(jobTypes?.[0] || '*', 100, { includeMetadata: true });
+          const jobs = await this.boss!.fetch(jobTypes?.[0] || '*', { batchSize: 100, includeMetadata: true });
           allJobs.push(...jobs);
         }
       } else {
         // Fetch all jobs for the user (this is inefficient, but pg-boss limitation)
-        const jobs = await this.boss!.fetch('*', 100, { includeMetadata: true });
+        const jobs = await this.boss!.fetch('*', { batchSize: 100, includeMetadata: true });
         allJobs = jobs;
       }
 
@@ -301,20 +308,22 @@ export class JobService {
     this.ensureInitialized();
 
     try {
-      await this.boss!.cancel(jobId);
+      // Get job details first to get the queue name
+      const job = await this.getJob(jobId);
+      if (!job) {
+        throw new Error('Job not found');
+      }
+
+      await this.boss!.cancel(job.name, jobId);
       console.log(`Job cancelled: ${jobId}`);
 
-      // Get job details for event
-      const job = await this.getJob(jobId);
-      if (job) {
-        this.emitEvent('job:cancelled', {
-          jobId,
-          type: job.name as JobType,
-          event: 'cancelled',
-          userId: job.data?.userId,
-          timestamp: new Date(),
-        });
-      }
+      this.emitEvent('job:cancelled', {
+        jobId,
+        type: job.name as JobType,
+        event: 'cancelled',
+        userId: job.data?.userId,
+        timestamp: new Date(),
+      });
     } catch (error) {
       console.error('Error cancelling job:', error);
       throw error;
@@ -377,11 +386,10 @@ export class JobService {
       // Create queue first (required in pg-boss v10+)
       await this.createQueue(jobName);
 
-      const workerOptions: PgBoss.WorkOptions = {
-        teamSize: options?.teamSize || 3,
-        teamConcurrency: options?.teamConcurrency || 1,
-        newJobCheckInterval: options?.newJobCheckInterval,
-        newJobCheckIntervalSeconds: options?.newJobCheckIntervalSeconds || 2,
+      const workerOptions: WorkOptions = {
+        pollingIntervalSeconds: options?.newJobCheckIntervalSeconds || 2,
+        batchSize: options?.teamSize || 3,
+        includeMetadata: false,
       };
 
       await this.boss!.work(jobName, workerOptions, async (job: any) => {

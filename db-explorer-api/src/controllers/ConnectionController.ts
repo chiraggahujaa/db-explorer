@@ -1099,7 +1099,7 @@ export class ConnectionController {
       const { id } = req.params;
       uuidSchema.parse(id);
 
-      const { force = false } = req.body;
+      const { force = false, schemas, config } = req.body;
 
       // Verify user has access to this connection
       const connection = await this.connectionService.findById(id);
@@ -1113,13 +1113,15 @@ export class ConnectionController {
       // Import jobService dynamically to avoid circular dependency
       const { jobService } = await import('../services/JobService.js');
 
-      // Create job for schema rebuild
+      // Create job for schema rebuild with granular options
       const jobId = await jobService.createJob(
         'schema-rebuild',
         {
           connectionId: id,
           userId,
           force,
+          schemas, // Array of {schema, tables?} for selective training
+          config,  // Training configuration options
         },
         {
           singletonKey: `schema-rebuild-${id}`, // Prevent duplicate rebuilds for same connection

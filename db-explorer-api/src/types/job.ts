@@ -38,11 +38,36 @@ export interface BaseJobData {
 }
 
 /**
+ * Schema/table selection for granular training
+ */
+export interface SchemaTableSelection {
+  schema: string;
+  tables?: string[];  // If undefined/empty, train all tables in schema
+}
+
+/**
+ * Training configuration options
+ */
+export interface TrainingConfig {
+  includeSchemaMetadata?: boolean;    // Include schema-level metadata (default: true)
+  includeTableMetadata?: boolean;     // Include table-level metadata (default: true)
+  includeColumnMetadata?: boolean;    // Include column details (default: true)
+  includeIndexes?: boolean;           // Include index information (default: true)
+  includeForeignKeys?: boolean;       // Include foreign key relationships (default: true)
+  includeConstraints?: boolean;       // Include constraints (default: true)
+  includeRowCounts?: boolean;         // Include approximate row counts (default: true)
+  includeSampleData?: boolean;        // Include sample data rows (default: false)
+  sampleDataRowCount?: number;        // Number of sample rows per table (default: 5)
+}
+
+/**
  * Schema rebuild job data
  */
 export interface SchemaRebuildJobData extends BaseJobData {
   connectionId: string;
-  force?: boolean;      // Force rebuild even if cache is fresh
+  force?: boolean;                    // Force rebuild even if cache is fresh
+  schemas?: SchemaTableSelection[];   // Specific schemas/tables to train (undefined = all)
+  config?: TrainingConfig;            // Training configuration options
 }
 
 /**
