@@ -1,7 +1,7 @@
 # DB Explorer - Project Structure
 
 ## Overview
-DB Explorer is a modern database exploration and management platform with **authentication, user management, and chat-based database access**. Users can query databases using natural language through the MCP (Model Context Protocol) server.
+DB Explorer is a modern database exploration and management platform with **authentication, user management, job processing, and AI-powered natural language database queries**. Users can query databases using natural language through the Vercel AI SDK integration with 42+ database tools.
 
 ## Core Features
 - User registration and login (email/password)
@@ -11,8 +11,11 @@ DB Explorer is a modern database exploration and management platform with **auth
 - Avatar upload
 - JWT-based authentication
 - Session management
-- **Chat-based database access** via MCP server
+- **AI-powered chat interface** using Vercel AI SDK with Gemini 2.5 Flash
+- **Async job management** with pg-boss for long-running operations
+- **Real-time notifications** via WebSocket and email
 - Multi-database support (MySQL, PostgreSQL, SQLite, Supabase)
+- Database connection management with role-based access control
 
 ---
 
@@ -168,86 +171,69 @@ db-explorer-web/
 
 ---
 
-## MCP Server Structure (`db-mcp/`)
+## Job Management & Notification System
 
-```
-db-mcp/
-├── src/
-│   ├── database/              # Database connectivity layer
-│   │   ├── connectors/        # Database-specific connectors
-│   │   │   ├── base.ts        # Base connector interface
-│   │   │   ├── mysql.ts       # MySQL connector
-│   │   │   ├── postgresql.ts  # PostgreSQL connector
-│   │   │   ├── sqlite.ts      # SQLite connector
-│   │   │   └── supabase.ts    # Supabase connector
-│   │   ├── factories/         # Factory pattern for connectors
-│   │   │   └── database-factory.ts
-│   │   └── managers/          # Connection management
-│   │       └── database-manager.ts
-│   │
-│   ├── tools/                 # MCP tools for database operations
-│   │   ├── query.ts           # Query execution tools
-│   │   ├── schema.ts          # Schema inspection tools
-│   │   ├── modify.ts          # Data modification tools
-│   │   ├── analysis.ts        # Database analysis tools
-│   │   ├── security.ts        # Security-related tools
-│   │   ├── tenant.ts          # Multi-tenant support
-│   │   ├── utility.ts         # Utility tools
-│   │   └── environment.ts    # Environment switching
-│   │
-│   ├── core/                  # Core functionality
-│   │   ├── config/            # Configuration management
-│   │   │   └── config-manager.ts
-│   │   ├── constants/         # Constants and enums
-│   │   │   └── index.ts
-│   │   └── security/         # Security features
-│   │       └── security-manager.ts
-│   │
-│   ├── types/                 # TypeScript type definitions
-│   │   ├── common.ts          # Common types
-│   │   ├── database.ts        # Database-specific types
-│   │   └── index.ts
-│   │
-│   ├── config.ts              # Configuration loading
-│   ├── constants.ts           # Application constants
-│   ├── database.ts            # Database initialization
-│   ├── security.ts            # Security initialization
-│   └── server.ts              # MCP server implementation
-│
-├── index.ts                   # Entry point
-├── package.json               # Bun dependencies
-├── tsconfig.json              # TypeScript configuration
-└── README.md                  # MCP server documentation
-```
+### Job Management
+**PostgreSQL-based job queue using pg-boss:**
+- Async job processing for long-running operations
+- Job status tracking and progress monitoring
+- Retry mechanism with exponential backoff
+- Job prioritization and singleton keys
+- Job cancellation and retry capabilities
 
-### Key MCP Server Features
+**Job Types:**
+- `schema-rebuild` - Async schema training/caching
+- Future: `data-export`, `bulk-import`, `analytics-report`
 
-**Database Connectors:**
-- MySQL/MariaDB - Full SQL support with connection pooling
-- PostgreSQL - Native support using Bun.sql with JSON/JSONB
-- SQLite - File-based and in-memory databases
-- Supabase - REST API integration with real-time capabilities
+**Job Services:**
+- `JobService.ts` - Job queue management
+- `schemaRebuildWorker.ts` - Schema rebuild worker
+- `workers/index.ts` - Worker registry
 
-**MCP Tools:**
-- `switch_environment` - Switch between configured databases
-- `list_tables` - List all tables in a database
-- `select_data` - Query data from tables
-- `describe_table` - Get table schema information
-- `execute_query` - Execute custom SQL queries (with validation)
-- `analyze_database` - Database analysis and insights
+### Notification System
+**Multi-channel notification delivery:**
+- In-app notifications (database-stored)
+- Email notifications (via Resend)
+- Real-time WebSocket notifications
 
-**Security Features:**
-- SQL injection detection and query validation
-- Rate limiting and access controls
-- Independent connection management with auto-retry
-- Health monitoring with graceful degradation
-- Audit logging and security reporting
+**Notification Features:**
+- User notification preferences
+- Auto-expiration and cleanup
+- Job event notifications (queued, started, completed, failed)
+- Invitation notifications
+- System alerts
 
-**Configuration:**
-- Uses numbered environment variables (`DB_TYPE_1`, `DB_HOST_1`, etc.)
-- Automatic database discovery
-- Multi-database support with independent connections
-- Fault-tolerant architecture
+**Notification Services:**
+- `NotificationService.ts` - Notification delivery
+- `WebSocketService.ts` - Real-time communication via Socket.IO
+
+### Real-time Communication
+**WebSocket server using Socket.IO:**
+- User-specific notification rooms
+- Job subscription mechanism
+- Automatic reconnection support
+- Event-driven architecture
+
+**WebSocket Events:**
+- `authenticate` - User authentication
+- `notification` - New notification received
+- `job:status` - Job status update
+- `job:update` - Job event update
+
+### AI Integration
+**Vercel AI SDK with 42+ Database Tools:**
+- Natural language to SQL conversion
+- Query execution and result formatting
+- Schema inspection and analysis
+- Real-time streaming responses
+- Multi-model support (Gemini 2.5 Flash, Claude, OpenAI)
+
+**Database Tools:**
+- Connection management
+- Schema exploration
+- Query execution
+- Data modification
+- Analytics and insights
 
 ---
 
@@ -337,33 +323,34 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 NEXT_PUBLIC_GOOGLE_CLIENT_ID=optional_google_oauth
 ```
 
-### MCP Server (`db-mcp/.env`)
+### Job Management & WebSocket (Additional Backend Config)
 ```env
-# MySQL Example
-DB_TYPE_1=mysql
-DB_HOST_1=localhost
-DB_PORT_1=3306
-DB_USER_1=username
-DB_PASSWORD_1=password
-DB_NAME_1=database_name
+# Database password for pg-boss (required)
+SUPABASE_DB_PASSWORD=your_database_password
 
-# PostgreSQL Example
-DB_TYPE_2=postgresql
-DB_CONNECTION_STRING_2=postgresql://user:pass@host:5432/dbname
+# pg-boss configuration (optional - defaults shown)
+PGBOSS_SCHEMA=pgboss
+PGBOSS_ARCHIVE_COMPLETED_AFTER_SECONDS=86400  # 24 hours
+PGBOSS_DELETE_ARCHIVED_AFTER_DAYS=30
+PGBOSS_RETENTION_DAYS=7
 
-# SQLite Example
-DB_TYPE_3=sqlite
-DB_FILE_3=/path/to/database.db
+# WebSocket configuration (optional)
+WEBSOCKET_CORS_ORIGIN=http://localhost:3000
+WEBSOCKET_PING_INTERVAL=25000  # 25 seconds
+WEBSOCKET_PING_TIMEOUT=60000   # 60 seconds
 
-# Supabase Example
-DB_TYPE_4=supabase
-DB_PROJECT_URL_4=https://your-project.supabase.co
-DB_ANON_KEY_4=your_anon_key
+# Job configuration (optional)
+MAX_CONCURRENT_JOBS=5
+JOB_TIMEOUT_MINUTES=30
 
-# Global settings
-DEFAULT_DATABASE=db_1
-READ_ONLY_MODE=false
-MAX_QUERY_RESULTS=1000
+# Notification configuration (optional)
+NOTIFICATION_RETENTION_DAYS=90
+EMAIL_NOTIFICATIONS_ENABLED=true
+
+# Email service for notifications (required)
+RESEND_API_KEY=your_resend_api_key
+EMAIL_FROM=noreply@dbexplorer.com
+EMAIL_FROM_NAME=DB Explorer
 ```
 
 ---
@@ -391,33 +378,8 @@ supabase link --project-ref YOUR_PROJECT_REF
 npm run db:push
 ```
 
-### MCP Server
-```bash
-cd db-mcp
-bun install
-cp .env.example .env
-# Configure .env with your database connections
-bun run start
-```
-
-**Claude Desktop Integration:**
-Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
-```json
-{
-  "mcpServers": {
-    "db-mcp": {
-      "command": "/Users/{user}/.bun/bin/bun",
-      "args": ["run", "start"],
-      "cwd": "/path/to/db-explorer/db-mcp",
-      "env": {
-        "DB_TYPE_1": "mysql",
-        "DB_HOST_1": "localhost",
-        ...
-      }
-    }
-  }
-}
-```
+**Note:** The job management system migrations will be applied automatically via the migration file:
+`20251127000001_create_notifications_system.sql`
 
 ---
 

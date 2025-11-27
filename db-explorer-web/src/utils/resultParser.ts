@@ -61,7 +61,7 @@ export function parseToolResult(result: any): ParsedResult {
     return parseTextResult(result);
   }
 
-  // Handle MCP content format
+  // Handle AI tool content format
   if (result.content && Array.isArray(result.content)) {
     const textContent = result.content
       .filter((c: any) => c.type === 'text')
