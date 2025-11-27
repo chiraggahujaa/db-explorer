@@ -101,7 +101,7 @@ Add the following environment variables to your `.env` file:
 ```bash
 # Database Connection (required for pg-boss)
 SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_DB_PASSWORD=your-database-password
+DB_PASSWORD=your-database-password
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 
 # pg-boss Configuration (optional - defaults shown)
@@ -503,7 +503,7 @@ socket.on('job:update', (data) => {
 
 **Error**: `Failed to initialize JobService: Database password not found`
 
-**Solution**: Ensure `SUPABASE_DB_PASSWORD` or `DB_PASSWORD` is set in your `.env` file.
+**Solution**: Ensure `DB_PASSWORD` or `DB_PASSWORD` is set in your `.env` file.
 
 ```bash
 # Get your database password from Supabase:

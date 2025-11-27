@@ -146,9 +146,9 @@ export class JobService {
 
     // Build PostgreSQL connection string
     // Format: postgresql://postgres:[PASSWORD]@db.[PROJECT_REF].supabase.co:5432/postgres
-    const dbPassword = process.env.SUPABASE_DB_PASSWORD || process.env.DB_PASSWORD;
+    const dbPassword = process.env.DB_PASSWORD || process.env.DB_PASSWORD;
     if (!dbPassword) {
-      throw new Error('Database password not found. Set SUPABASE_DB_PASSWORD or DB_PASSWORD');
+      throw new Error('Database password not found. Set DB_PASSWORD or DB_PASSWORD');
     }
 
     return `postgresql://postgres:${dbPassword}@db.${projectRef}.supabase.co:5432/postgres`;

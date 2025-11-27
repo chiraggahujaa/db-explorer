@@ -326,7 +326,7 @@ NEXT_PUBLIC_GOOGLE_CLIENT_ID=optional_google_oauth
 ### Job Management & WebSocket (Additional Backend Config)
 ```env
 # Database password for pg-boss (required)
-SUPABASE_DB_PASSWORD=your_database_password
+DB_PASSWORD=your_database_password
 
 # pg-boss configuration (optional - defaults shown)
 PGBOSS_SCHEMA=pgboss
