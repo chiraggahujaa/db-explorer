@@ -1,64 +1,53 @@
 # DB Explorer - AI-Powered Database Management
 
-A modern database exploration tool with natural language queries, real-time streaming, and intelligent permissions.
+A modern database exploration tool with natural language queries powered by Vercel AI SDK and Google Gemini 2.5 Flash.
 
 ## 🌟 Features
 
-- 🤖 **Natural Language Queries** - Ask questions in plain English
-- 🤖 **Multiple AI Providers** - Choose between Gemini (10x cheaper) or Claude
-- ⚡ **Real-Time Streaming** - See AI responses as they arrive
-- 🔒 **Smart Permissions** - Protection for sensitive operations  
-- 🎨 **Modern UI** - Clean, professional interface
-- 🔌 **Direct MCP Connection** - Efficient SSE-based communication
+- 🤖 **Natural Language Queries** - Ask questions in plain English using Gemini 2.5 Flash
+- ⚡ **Real-Time Streaming** - See AI responses as they arrive with Vercel AI SDK
+- 🔒 **Smart Context Management** - Automatic context summarization for long conversations
+- 🎨 **Modern UI** - Clean, professional interface with dark mode
 - 🚀 **Dynamic Connections** - Configure databases on-the-fly
-- 📊 **40+ Database Tools** - Query, modify, and analyze data
+- 📊 **42+ Database Tools** - Query, modify, and analyze data with AI-powered tools
+- 💾 **Schema Pre-training** - Train AI on your database schema for better queries
+- 🎯 **Context Caching** - Gemini 2.5 Flash's implicit caching for 75% cost reduction
 
 ## 🏗️ Architecture
 
 ```
-Frontend (React) ━━━ SSE ━━━ MCP Server (Bun) ━━━ Database
-                                      ↑
-Backend (Express) ━━━━━━━━━━━━━━━━━━━┘
+Frontend (Next.js) ━━━ API Route (/api/chat) ━━━ Gemini 2.5 Flash
+                              ↓
+Backend (Express) ━━━ Database Tools ━━━ Multi-DB Support
   (Auth & Connections)
 ```
 
 ## 🚀 Quick Start
 
 ### Prerequisites
-- **Bun**: `curl -fsSL https://bun.sh/install | bash`
 - **Node.js 18+**
-- **Database** (PostgreSQL, MySQL, SQLite, etc.)
+- **Database** (PostgreSQL, MySQL, SQLite, or Supabase)
+- **Gemini API Key** (Get from [Google AI Studio](https://aistudio.google.com/app/apikey))
 
 ### Installation
 
 ```bash
-# 1. Start MCP Server
-cd db-mcp
-bun install
-bun run dev          # http://localhost:3002
-
-# 2. Start Backend API
+# 1. Start Backend API
 cd db-explorer-api
 npm install
+cp .env.example .env
+# Configure your Supabase credentials in .env
 npm run dev          # http://localhost:5000
 
-# 3. Start Frontend
+# 2. Start Frontend
 cd db-explorer-web
 npm install
+cp .env.example .env.local
+# Add your Gemini API key to .env.local
 npm run dev          # http://localhost:3000
 ```
 
 ## 📝 Configuration
-
-### MCP Server (.env)
-```bash
-MCP_SERVER_PORT=3002
-MAX_QUERY_RESULTS=1000
-ALLOW_DATA_MODIFICATION=true
-ALLOW_DROP=false
-READ_ONLY_MODE=false
-LOG_LEVEL=info
-```
 
 ### Backend (.env)
 ```bash
@@ -73,20 +62,12 @@ FRONTEND_URL=http://localhost:3000
 ```bash
 # API Configuration
 NEXT_PUBLIC_API_URL=http://localhost:5000
-NEXT_PUBLIC_MCP_SERVER_URL=http://localhost:3002
 
-# AI Provider (recommended: gemini)
-NEXT_PUBLIC_AI_PROVIDER=gemini  # or 'claude'
-
-# Google Gemini API Key
+# Google Gemini API Key (Required)
 # Get from: https://aistudio.google.com/app/apikey
 NEXT_PUBLIC_GEMINI_API_KEY=your-gemini-api-key
 
-# Anthropic Claude API Key (Optional)
-# Get from: https://console.anthropic.com/
-# NEXT_PUBLIC_ANTHROPIC_API_KEY=your-anthropic-key
-
-# Google OAuth
+# Google OAuth (Optional)
 NEXT_PUBLIC_GOOGLE_CLIENT_ID=your-google-client-id
 ```
 
@@ -96,6 +77,7 @@ NEXT_PUBLIC_GOOGLE_CLIENT_ID=your-google-client-id
 ```
 Show me all users created in the last 7 days
 Find customers with orders over $1000
+What are the foreign key relationships in this database?
 ```
 
 **SQL Queries:**
@@ -103,59 +85,87 @@ Find customers with orders over $1000
 SELECT * FROM orders WHERE total > 1000 LIMIT 10
 ```
 
-**Direct Tool Calls:**
+**Schema Exploration:**
 ```
-/list_tables
-/describe_table {"table": "users"}
+Show me all tables in this database
+Describe the users table structure
 ```
 
 ## 🔒 Security Features
 
-- **Permission System**: Automatic prompts for DELETE, sensitive tables, large queries
-- **Configurable Protection**: Read-only mode, query limits, DROP/TRUNCATE guards
-- **Smart Caching**: "Always Allow" option for trusted operations
+- **JWT Authentication**: Secure user authentication and authorization
+- **Role-Based Access**: Owner, admin, and viewer roles for connections
+- **Query Validation**: AI-powered query safety checks
+- **Configurable Protection**: Read-only mode, query limits
 
-## 📊 Available Tools
+## 📊 Available AI Tools (42+)
 
-- **Schema**: `list_databases`, `list_tables`, `describe_table`, `show_indexes`
-- **Query**: `select_data`, `count_records`, `search_records`, `execute_custom_query`
-- **Modify**: `insert_record`, `update_record`, `delete_record`, `bulk_insert`
-- **Analysis**: `join_tables`, `find_orphaned_records`, `analyze_table_relationships`
-- **Utility**: `explain_query`, `check_table_status`, `optimize_table`, `test_connection`
+### Schema & Structure
+- `list_databases`, `list_tables`, `describe_table`, `show_indexes`
+- `analyze_foreign_keys`, `get_table_dependencies`
+
+### Data Query
+- `select_data`, `count_records`, `find_by_id`, `search_records`
+- `get_recent_records`, `execute_custom_query`
+
+### Data Modification
+- `insert_record`, `update_record`, `delete_record`, `bulk_insert`
+
+### Analysis & Relationships
+- `join_tables`, `find_orphaned_records`, `validate_referential_integrity`
+- `analyze_table_relationships`, `get_column_statistics`
+
+### Utility & Maintenance
+- `explain_query`, `check_table_status`, `optimize_table`
+- `test_connection`, `get_database_size`
 
 ## 🔧 Tech Stack
 
-- **Frontend**: Next.js 15, React 19, TailwindCSS, Zustand, MCP SDK
-- **Backend**: Express 5, Supabase, JWT
-- **MCP Server**: Bun, Zod, Model Context Protocol
-- **Databases**: MySQL, PostgreSQL, SQLite, MongoDB, Supabase
+- **Frontend**: Next.js 15, React 19, TailwindCSS, Zustand, Vercel AI SDK
+- **Backend**: Express 5, Supabase, JWT, TypeScript
+- **AI**: Gemini 2.5 Flash with 42+ database tools
+- **Databases**: MySQL, PostgreSQL, SQLite, Supabase
+
+## 🎯 Key Features
+
+### Schema Pre-training
+Train the AI on your database schema for more accurate queries:
+1. Connect to your database
+2. Click "Train Schema" button
+3. AI learns your table structures, relationships, and constraints
+4. Get better query suggestions and validations
+
+### Context Management
+- **Automatic Summarization**: Long conversations are automatically summarized
+- **Context Window Tracking**: Visual indicator of context usage
+- **Implicit Caching**: Gemini 2.5 Flash caches repeated content for cost savings
+
+### Chat History
+- **Persistent Sessions**: Resume conversations anytime
+- **Title Generation**: AI generates meaningful titles for chats
+- **Multi-Connection Support**: Separate chat histories per database
 
 ## 🐛 Troubleshooting
 
-**MCP Server Won't Start:**
-```bash
-# Check port availability
-lsof -i :3002
-
-# Try different port
-MCP_SERVER_PORT=3003 bun run dev
-```
-
 **Frontend Connection Issues:**
-1. Verify MCP server is running: `curl http://localhost:3002/sse`
-2. Check `NEXT_PUBLIC_MCP_SERVER_URL` in frontend `.env.local`
+1. Verify backend is running: `curl http://localhost:5000/health`
+2. Check `NEXT_PUBLIC_API_URL` in frontend `.env.local`
 3. Review browser console for errors
 
 **AI API Errors:**
-1. **For Gemini**: Get API key from https://aistudio.google.com/app/apikey
-2. **For Claude**: Get API key from https://console.anthropic.com/
-3. Set the appropriate environment variable in frontend `.env.local`
-4. Restart your development server
+1. Get Gemini API key from https://aistudio.google.com/app/apikey
+2. Set `NEXT_PUBLIC_GEMINI_API_KEY` in frontend `.env.local`
+3. Restart your development server
+
+**Database Connection Issues:**
+1. Verify database credentials in backend `.env`
+2. Check Supabase connection status
+3. Test connection from the UI
 
 ## 📚 Documentation
 
-- [MCP Server Guide](./db-mcp/README.md) - Tools and configuration
-- [API Documentation](./db-explorer-api/README.md) - Backend endpoints
+- [Frontend Documentation](./db-explorer-web/CLAUDE.md) - Web app setup and development
+- [Backend Documentation](./db-explorer-api/CLAUDE.md) - API server setup and development
 
 ## 🤝 Contributing
 
@@ -169,7 +179,6 @@ MCP_SERVER_PORT=3003 bun run dev
 
 MIT License - See LICENSE file for details
 
-
 ---
 
-**Made with ❤️ for database developers**
+**Made with ❤️ for database developers using Vercel AI SDK**

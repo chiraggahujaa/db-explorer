@@ -1,5 +1,5 @@
 // SQLite Database Connector
-// Adapted from db-mcp for Node.js using better-sqlite3 library
+// Database connector for Node.js using better-sqlite3 library
 
 import Database from 'better-sqlite3';
 import { BaseDatabaseConnection, type DatabaseConfig, type QueryResult } from './base.js';
