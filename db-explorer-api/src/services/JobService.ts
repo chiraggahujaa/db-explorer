@@ -5,7 +5,7 @@
  * Handles job creation, status tracking, cancellation, and worker registration
  */
 
-import PgBoss from 'pg-boss';
+import { PgBoss } from 'pg-boss';
 import {
   Job,
   JobData,
