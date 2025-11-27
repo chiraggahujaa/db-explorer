@@ -12,6 +12,81 @@ const fromName = process.env.EMAIL_FROM_NAME || 'DB Explorer';
 
 export class EmailService {
   /**
+   * Send notification email
+   */
+  async sendNotificationEmail(
+    to: string,
+    subject: string,
+    message: string,
+    data?: any
+  ): Promise<{ success: boolean; error?: string }> {
+    if (!resend) {
+      console.warn('RESEND_API_KEY not configured. Email sending is disabled.');
+      return {
+        success: false,
+        error: 'Email service not configured',
+      };
+    }
+
+    try {
+      const { error } = await resend.emails.send({
+        from: `${fromName} <${fromEmail}>`,
+        to,
+        subject,
+        html: `
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <meta charset="utf-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>${subject}</title>
+            </head>
+            <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+              <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; border-radius: 8px 8px 0 0;">
+                <h1 style="color: white; margin: 0; font-size: 24px;">${subject}</h1>
+              </div>
+              <div style="background: #ffffff; padding: 30px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
+                <p style="font-size: 16px; margin-bottom: 20px;">
+                  ${message}
+                </p>
+                ${data?.actionUrl ? `
+                <div style="text-align: center; margin: 30px 0;">
+                  <a href="${data.actionUrl}" style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-decoration: none; padding: 12px 30px; border-radius: 6px; font-weight: 600; font-size: 16px;">
+                    View Details
+                  </a>
+                </div>
+                ` : ''}
+              </div>
+              <div style="text-align: center; margin-top: 20px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
+                <p style="font-size: 12px; color: #9ca3af;">
+                  DB Explorer Notification
+                </p>
+              </div>
+            </body>
+          </html>
+        `,
+        text: message,
+      });
+
+      if (error) {
+        console.error('Error sending notification email:', error);
+        return {
+          success: false,
+          error: error.message || 'Failed to send email',
+        };
+      }
+
+      return { success: true };
+    } catch (error: any) {
+      console.error('Error in sendNotificationEmail:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to send email',
+      };
+    }
+  }
+
+  /**
    * Send invitation email
    */
   static async sendInvitationEmail(invitation: InvitationWithDetails): Promise<{ success: boolean; error?: string }> {

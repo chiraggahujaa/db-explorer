@@ -31,7 +31,8 @@
       "Bash(perl -i -pe:*)",
       "Bash(bash /tmp/test_chat.sh:*)",
       "Bash(timeout 10 bash:*)",
-      "Bash(ps:*)"
+      "Bash(ps:*)",
+      "Bash(npx shadcn@latest:*)"
     ],
     "deny": [],
     "ask": []

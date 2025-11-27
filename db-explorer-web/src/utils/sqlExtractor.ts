@@ -1,5 +1,5 @@
 /**
- * Utility to extract SQL queries from MCP tool inputs
+ * Utility to extract SQL queries from AI tool inputs
  */
 
 export interface ToolCallData {

@@ -49,7 +49,7 @@ You are already connected to this database server. The connection was configured
 - Use configure_connection (already done)
 - Ask which database to use${selectedSchema ? " (it has been selected above)" : ""}
 
-When using MCP tools, the 'connection' parameter is automatically set to the current connection (${connection.id}). You should:
+When using database tools, the 'connection' parameter is automatically set to the current connection (${connection.id}). You should:
 ${
     selectedSchema
       ? `- ALWAYS use database: "${selectedSchema}" parameter in your tool calls since it's already selected by the user

@@ -1,7 +1,7 @@
 /**
  * Chat Store
  * Zustand store for managing chat session state
- * Extracted from useMCPStore - removed all MCP-specific functionality
+ * Manages chat sessions, messages, and AI interactions
  */
 
 import { create } from 'zustand';

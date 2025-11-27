@@ -48,6 +48,29 @@ export const connectionsAPI = {
     return res.data;
   },
 
+  // Rebuild schema (async job-based)
+  rebuildSchema: async (
+    id: string,
+    options?: {
+      force?: boolean;
+      schemas?: Array<{ schema: string; tables?: string[] }>;
+      config?: {
+        includeSchemaMetadata?: boolean;
+        includeTableMetadata?: boolean;
+        includeColumnMetadata?: boolean;
+        includeIndexes?: boolean;
+        includeForeignKeys?: boolean;
+        includeConstraints?: boolean;
+        includeRowCounts?: boolean;
+        includeSampleData?: boolean;
+        sampleDataRowCount?: number;
+      };
+    }
+  ): Promise<{ success: boolean; data: { jobId: string; message: string }; error?: string }> => {
+    const res = await api.post(`/api/connections/${id}/rebuild`, options || {});
+    return res.data;
+  },
+
   // Get all members of a connection
   getConnectionMembers: async (id: string): Promise<MembersResponse> => {
     const res = await api.get(`/api/connections/${id}/members`);

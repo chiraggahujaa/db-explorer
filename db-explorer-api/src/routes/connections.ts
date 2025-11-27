@@ -57,6 +57,9 @@ router.post('/:id/train-schema', schemaTrainingController.trainSchema.bind(schem
 router.get('/:id/schema-cache', schemaTrainingController.getSchemaCache.bind(schemaTrainingController));
 router.delete('/:id/schema-cache', schemaTrainingController.deleteSchemaCache.bind(schemaTrainingController));
 
+// Schema rebuild (async job)
+router.post('/:id/rebuild', connectionController.rebuildSchema.bind(connectionController));
+
 // Chat sessions for a connection
 router.get('/:connectionId/chat-sessions', chatSessionController.getChatSessionsByConnection.bind(chatSessionController));
 
