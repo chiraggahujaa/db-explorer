@@ -7,8 +7,45 @@
 import type { ConnectionSchemaCache } from '@/types/connection';
 
 /**
- * Format cached schema for AI context
- * Converts schema JSON to readable text format optimized for LLM consumption
+ * Format cached schema for AI context - CONCISE VERSION (Recommended)
+ * Only includes schema names and their table lists to minimize token usage
+ * Reduces token count by ~95-99% compared to verbose version
+ * 
+ * The AI can use database tools to discover column details, types, and relationships dynamically
+ */
+export function formatSchemaForAIConcise(cache: ConnectionSchemaCache): string {
+  const { schemaData } = cache;
+
+  // Create ultra-concise format: { schema1: [t1, t2, ...], schema2: [...] }
+  const schemaMap: Record<string, string[]> = {};
+  
+  for (const schema of schemaData.schemas) {
+    schemaMap[schema.name] = schema.tables.map(t => t.name);
+  }
+
+  let formatted = `# DATABASE SCHEMA\n\n`;
+  formatted += `**Type:** ${schemaData.database_type}\n`;
+  formatted += `**Tables:** ${schemaData.total_tables}\n\n`;
+  
+  // Compact JSON representation
+  formatted += `**Schema Structure:**\n\`\`\`json\n`;
+  formatted += JSON.stringify(schemaMap, null, 2);
+  formatted += `\n\`\`\`\n\n`;
+  
+  formatted += `**Instructions:**\n`;
+  formatted += `- Use your database tools to discover column details, types, and relationships\n`;
+  formatted += `- Query the schema dynamically when needed\n`;
+  formatted += `- Tables are listed above for reference only\n`;
+
+  return formatted;
+}
+
+/**
+ * Format cached schema for AI context - VERBOSE VERSION
+ * Includes all columns, types, constraints, foreign keys, and indexes
+ * WARNING: Can result in tens of thousands of tokens for large databases
+ * 
+ * @deprecated Consider using formatSchemaForAIConcise instead to reduce token usage
  */
 export function formatSchemaForAI(cache: ConnectionSchemaCache): string {
   const { schemaData, lastTrainedAt } = cache;
@@ -165,127 +202,6 @@ export function buildSchemaOverview(cache: ConnectionSchemaCache): string {
  */
 export function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
-}
-
-/**
- * Check if schema should be padded to meet caching minimum
- * Returns true if schema is close to but below the caching threshold
- */
-export function shouldPadSchema(tokenCount: number, cachingThreshold: number = 32768): boolean {
-  // Pad if we're within 80-100% of threshold
-  const lowerBound = cachingThreshold * 0.8;
-  return tokenCount >= lowerBound && tokenCount < cachingThreshold;
-}
-
-/**
- * Generate padding content to reach minimum token count for caching
- * Adds useful query patterns and examples
- */
-export function generateSchemaPadding(cache: ConnectionSchemaCache, tokensNeeded: number): string {
-  let padding = `\n\n# COMMON QUERY PATTERNS & EXAMPLES\n\n`;
-
-  const { schemaData } = cache;
-
-  // Add relationship-based query patterns
-  padding += `## Join Patterns\n\n`;
-
-  for (const schema of schemaData.schemas) {
-    const tablesWithFKs = schema.tables.filter(t =>
-      t.foreign_keys && t.foreign_keys.length > 0
-    );
-
-    for (const table of tablesWithFKs) {
-      padding += `### ${schema.name}.${table.name} Relationships\n\n`;
-
-      for (const fk of table.foreign_keys || []) {
-        padding += `**Join with ${fk.referenced_table}:**\n`;
-        padding += '```sql\n';
-        padding += `SELECT \n`;
-        padding += `  ${table.name}.*,\n`;
-        padding += `  ${fk.referenced_table}.*\n`;
-        padding += `FROM ${schema.name}.${table.name}\n`;
-        padding += `JOIN ${schema.name}.${fk.referenced_table}\n`;
-        padding += `  ON ${table.name}.${fk.column_name} = ${fk.referenced_table}.${fk.referenced_column}\n`;
-        padding += '```\n\n';
-
-        // Check if we have enough padding
-        if (estimateTokens(padding) >= tokensNeeded) {
-          return padding;
-        }
-      }
-    }
-  }
-
-  // Add filtering patterns
-  padding += `## Common Filtering Patterns\n\n`;
-
-  for (const schema of schemaData.schemas) {
-    for (const table of schema.tables.slice(0, 5)) { // Limit to first 5 tables
-      padding += `### Filtering ${table.name}\n\n`;
-
-      // Date filtering examples
-      const dateColumns = table.columns.filter(c =>
-        c.type.includes('date') || c.type.includes('time')
-      );
-      if (dateColumns.length > 0) {
-        const dateCol = dateColumns[0];
-        padding += `**By date range:**\n`;
-        padding += '```sql\n';
-        padding += `SELECT * FROM ${schema.name}.${table.name}\n`;
-        padding += `WHERE ${dateCol.name} BETWEEN '2024-01-01' AND '2024-12-31'\n`;
-        padding += '```\n\n';
-      }
-
-      // Text search examples
-      const textColumns = table.columns.filter(c =>
-        c.type.includes('varchar') || c.type.includes('text') || c.type.includes('char')
-      );
-      if (textColumns.length > 0) {
-        const textCol = textColumns[0];
-        padding += `**By text search:**\n`;
-        padding += '```sql\n';
-        padding += `SELECT * FROM ${schema.name}.${table.name}\n`;
-        padding += `WHERE ${textCol.name} LIKE '%search_term%'\n`;
-        padding += '```\n\n';
-      }
-
-      if (estimateTokens(padding) >= tokensNeeded) {
-        return padding;
-      }
-    }
-  }
-
-  // Add aggregation examples
-  padding += `## Aggregation Examples\n\n`;
-
-  for (const schema of schemaData.schemas) {
-    for (const table of schema.tables.slice(0, 3)) {
-      const numericColumns = table.columns.filter(c =>
-        c.type.includes('int') || c.type.includes('decimal') ||
-        c.type.includes('float') || c.type.includes('double')
-      );
-
-      if (numericColumns.length > 0) {
-        const numCol = numericColumns[0];
-        padding += `**Count and sum for ${table.name}:**\n`;
-        padding += '```sql\n';
-        padding += `SELECT \n`;
-        padding += `  COUNT(*) as total_records,\n`;
-        padding += `  SUM(${numCol.name}) as total_${numCol.name},\n`;
-        padding += `  AVG(${numCol.name}) as avg_${numCol.name},\n`;
-        padding += `  MIN(${numCol.name}) as min_${numCol.name},\n`;
-        padding += `  MAX(${numCol.name}) as max_${numCol.name}\n`;
-        padding += `FROM ${schema.name}.${table.name}\n`;
-        padding += '```\n\n';
-
-        if (estimateTokens(padding) >= tokensNeeded) {
-          return padding;
-        }
-      }
-    }
-  }
-
-  return padding;
 }
 
 /**

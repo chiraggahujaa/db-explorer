@@ -7,8 +7,7 @@
 import { streamText, tool, convertToCoreMessages } from 'ai';
 import { google } from '@ai-sdk/google';
 import { z } from 'zod';
-import { formatSchemaForAI, estimateTokens, shouldPadSchema, generateSchemaPadding, isSchemaStale } from '@/lib/schema-formatter';
-import { schemaTrainingAPI } from '@/lib/api/connections';
+import { formatSchemaForAI, formatSchemaForAIConcise, estimateTokens, isSchemaStale } from '@/lib/schema-formatter';
 import api from '@/lib/api/axios';
 import { getDatabaseAssistantPrompt } from '@/lib/prompts/database-assistant-prompt';
 
@@ -67,14 +66,18 @@ export async function POST(req: Request) {
     let canUseCache = false;
 
     try {
-      schemaCache = await schemaTrainingAPI.getSchemaCache(connectionId);
+      // server-side API call
+      const schemaCacheResponse = await executeDBQuery(connectionId, 'schema-cache', {}, accessToken, 'GET');
+      if (schemaCacheResponse.success && schemaCacheResponse.data) {
+        schemaCache = schemaCacheResponse.data;
+      }
     } catch (error) {
       console.log('[Chat API] Schema not trained, continuing without schema context');
     }
 
     if (schemaCache) {
-      // Format schema for AI
-      schemaDataContext = formatSchemaForAI(schemaCache);
+      // Format schema for AI - using CONCISE version to reduce token usage by 95-99%
+      schemaDataContext = formatSchemaForAIConcise(schemaCache);
       const schemaTokens = estimateTokens(schemaDataContext);
 
       console.log(`[Chat API] Schema data tokens: ${schemaTokens}`);
@@ -109,12 +112,12 @@ export async function POST(req: Request) {
     const model = 'gemini-2.5-flash';
 
     console.log(`[Chat API] Using model: ${model}, caching: ${canUseCache}`);
-    console.log('[Chat API] Received messages:', JSON.stringify(messages, null, 2));
+    console.log('[Chat API] Received messages!');
 
     // Transform UIMessages to CoreMessages using AI SDK utility
     const coreMessages = convertToCoreMessages(messages);
 
-    console.log('[Chat API] Transformed to core messages:', JSON.stringify(coreMessages, null, 2));
+    console.log('[Chat API] Transformed to core messages!');
 
     // Build system configuration
     // Note: Gemini 2.5 Flash automatically uses implicit caching for repeated prefixes
