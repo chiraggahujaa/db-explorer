@@ -351,7 +351,13 @@ export class DatabaseExplorerService {
         await dbConnection.query(`USE \`${schemaName}\``);
       }
 
-      const result = await dbConnection.query(sql);
+      // MySQL compatibility: Rewrite queries with LIMIT inside IN/ALL/ANY/SOME subqueries
+      let processedSql = sql;
+      if (dbType === 'mysql') {
+        processedSql = this.rewriteMySqlLimitInSubquery(sql);
+      }
+
+      const result = await dbConnection.query(processedSql);
 
       return {
         success: true,
@@ -372,6 +378,30 @@ export class DatabaseExplorerService {
         }
       }
     }
+  }
+
+  /**
+   * Rewrite MySQL queries with LIMIT inside IN/ALL/ANY/SOME subqueries for compatibility
+   * MySQL doesn't support LIMIT inside IN subqueries in older versions
+   * Transforms: WHERE col IN (SELECT ... LIMIT n)
+   * To: WHERE col IN (SELECT * FROM (SELECT ... LIMIT n) AS subq)
+   */
+  private rewriteMySqlLimitInSubquery(sql: string): string {
+    // Use a more sophisticated approach to handle nested parentheses
+    let result = sql;
+    let changed = false;
+
+    // Look for patterns like: IN (SELECT ... LIMIT ...)
+    const inSubqueryPattern = /\b(IN|ALL|ANY|SOME)\s*\(\s*(SELECT\s+.+?LIMIT\s+\d+)\s*\)/gi;
+
+    result = result.replace(inSubqueryPattern, (match, operator, subquery) => {
+      changed = true;
+      // Wrap the subquery in a derived table
+      return `${operator} (SELECT * FROM (${subquery}) AS mysql_limit_subq)`;
+    });
+
+
+    return result;
   }
 
   /**

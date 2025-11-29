@@ -60,7 +60,6 @@ export class MySQLConnection extends BaseDatabaseConnection {
       connection.release();
 
       this.setConnected(true);
-      console.log(`✓ MySQL connection established: ${this.id}`);
     } catch (error) {
       this.logError('connect', error);
       this.setConnected(false, error instanceof Error ? error.message : String(error));
@@ -106,7 +105,9 @@ export class MySQLConnection extends BaseDatabaseConnection {
     }
 
     try {
-      const [results, fields] = await this.pool.execute(sql, params);
+      // Use query() instead of execute() to avoid prepared statement issues
+      // query() can handle both prepared and non-prepared statements
+      const [results, fields] = await this.pool.query(sql, params);
 
       if (Array.isArray(results)) {
         return {

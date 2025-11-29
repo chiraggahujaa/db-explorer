@@ -51,7 +51,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const { messages, connectionId, userId, selectedSchema, chatConfig } = await req.json();
+    const { messages, connectionId, userId, selectedSchema, selectedTables, chatConfig } = await req.json();
 
     if (!connectionId || !userId) {
       return new Response(
@@ -98,7 +98,7 @@ export async function POST(req: Request) {
     }
 
     // Build comprehensive system prompt with chat config
-    const systemPrompt = getDatabaseAssistantPrompt(selectedSchema, chatConfig);
+    const systemPrompt = getDatabaseAssistantPrompt(selectedSchema, selectedTables, chatConfig);
 
     // If we have trained schema data, append it to the prompt
     const fullSystemPrompt = schemaDataContext
@@ -425,9 +425,14 @@ export async function POST(req: Request) {
           connection: z.string().optional(),
         }),
         execute: async (input, options) => {
+          // Use provided schema or fall back to selectedSchema from chat context
+          const schemaToUse = input.schema || selectedSchema;
+          if (!schemaToUse) {
+            throw new Error('Database/schema name is required. Please specify a schema parameter or ensure a schema is selected in the chat context.');
+          }
           const result = await executeDBQuery(connectionId, 'execute', {
             query: input.sql,
-            schema: input.schema
+            schema: schemaToUse
           }, accessToken, 'POST');
           return result.data || [];
         }

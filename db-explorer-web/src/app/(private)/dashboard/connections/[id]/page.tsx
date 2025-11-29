@@ -17,21 +17,14 @@ export default function ConnectionExplorerPage() {
   const connectionId = params.id as string;
   const chatSessionIdFromUrl = searchParams.get("chatId");
 
-  console.log('[ConnectionExplorerPage] Rendering with:', {
-    connectionId,
-    chatSessionIdFromUrl,
-    paramsId: params.id,
-  });
-
   const [activeChatSessionId, setActiveChatSessionId] = useState<string | undefined>(undefined);
   const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState(true);
+  const [chatSessionKey, setChatSessionKey] = useState<string>('initial');
 
   const { data: connection, isLoading: isLoadingConnection, error: connectionError } = useQuery({
     queryKey: ["connection", connectionId],
     queryFn: async () => {
-      console.log('[ConnectionExplorerPage] Fetching connection:', connectionId);
       const result = await connectionsAPI.getConnection(connectionId);
-      console.log('[ConnectionExplorerPage] Connection result:', result);
       if (!result.success) {
         throw new Error("Failed to fetch connection");
       }
@@ -60,6 +53,10 @@ export default function ConnectionExplorerPage() {
       console.error("[ConnectionExplorerPage] Failed to clear chat state:", error);
     }
 
+    // Generate new unique key to force complete component remount
+    const newKey = `session-${Date.now()}`;
+    setChatSessionKey(newKey);
+
     // Clear chatId from URL - this will trigger ChatInterface to start fresh
     router.push(`/dashboard/connections/${connectionId}`);
     setActiveChatSessionId(undefined);
@@ -68,6 +65,9 @@ export default function ConnectionExplorerPage() {
   const handleSelectChat = useCallback((chatSessionId: string) => {
     if (!chatSessionId) {
       // Clear chat if empty string is passed - navigate to new chat view
+      useChatStore.getState().clearCurrentChat();
+      const newKey = `session-${Date.now()}`;
+      setChatSessionKey(newKey);
       router.push(`/dashboard/connections/${connectionId}`);
       setActiveChatSessionId(undefined);
       return;
@@ -79,15 +79,7 @@ export default function ConnectionExplorerPage() {
     setActiveChatSessionId(chatSessionId);
   }, [connectionId, router]);
 
-  console.log('[ConnectionExplorerPage] State:', {
-    isLoadingConnection,
-    hasConnection: !!connection,
-    hasError: !!connectionError,
-    connectionName: connection?.name,
-  });
-
   if (isLoadingConnection) {
-    console.log('[ConnectionExplorerPage] Showing loading state');
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <LoadingSpinner />
@@ -118,7 +110,6 @@ export default function ConnectionExplorerPage() {
     );
   }
 
-  console.log('[ConnectionExplorerPage] Rendering main content for connection:', connection.name);
   return (
     <ConnectionExplorerProvider key={connectionId}>
       <div className="flex h-full overflow-hidden">
@@ -135,6 +126,7 @@ export default function ConnectionExplorerPage() {
         {/* Main Content Area - Chat interface will render right sidebar */}
         <div className="flex-1 flex overflow-hidden">
           <ChatInterface
+            key={chatSessionKey}
             connection={connection}
             chatSessionId={activeChatSessionId}
             onNewChat={handleNewChat}

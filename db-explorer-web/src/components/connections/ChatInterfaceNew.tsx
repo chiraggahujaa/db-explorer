@@ -150,11 +150,17 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
   // Get sidebar selection context
   const { selectedSchema, selectedTables } = useConnectionExplorer();
 
-  // Use ref to always get latest selectedSchema and chatConfig values in dynamic body function
+  // Use ref to always get latest selectedSchema, selectedTables and chatConfig values in dynamic body function
   const selectedSchemaRef = useRef(selectedSchema);
   selectedSchemaRef.current = selectedSchema;
+  const selectedTablesRef = useRef(selectedTables);
   const chatConfigRef = useRef(chatConfig);
   chatConfigRef.current = chatConfig;
+
+  // Update selectedTables ref whenever it changes
+  useEffect(() => {
+    selectedTablesRef.current = selectedTables;
+  }, [selectedTables]);
 
   // Get chat session state from store
   const {
@@ -200,15 +206,16 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
       },
       body: () => {
         // Dynamic body function - called for each request to get latest context
-        // Use ref to get the latest selectedSchema and chatConfig values
+        // Use ref to get the latest selectedSchema, selectedTables and chatConfig values
         const currentSchema = selectedSchemaRef.current;
         const currentChatConfig = chatConfigRef.current;
-
+        const currentSelectedTables = Array.from(selectedTablesRef.current);
 
         return {
           connectionId: connection.id,
           userId: connection.createdBy,
           selectedSchema: currentSchema,
+          selectedTables: currentSelectedTables,
           chatConfig: currentChatConfig,
         };
       },
@@ -266,7 +273,7 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
   //   }
   // }, [allToolCalls.length, isToolSidebarOpen]);
 
-  // Load chat history on mount
+  // Load chat history on mount and when chatSessionId changes
   useEffect(() => {
     const loadExistingChat = async () => {
       if (chatSessionId) {
@@ -294,8 +301,7 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
     };
 
     loadExistingChat();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chatSessionId, connection.id]);
+  }, [chatSessionId, connection.id, loadChatHistory, clearCurrentChat, setMessages]);
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -374,13 +380,16 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
                 variant="outline"
                 size="sm"
                 onClick={() => {
+                  // Always clear messages immediately first
+                  console.log('[ChatInterface] Clearing messages for new session');
+                  setMessages([]);
+                  titleGeneratedRef.current = false;
+
                   if (onNewChat) {
                     onNewChat();
                   } else {
                     // Fallback: Clear current chat state locally
                     clearCurrentChat();
-                    setMessages([]);
-                    titleGeneratedRef.current = false;
                   }
                   toast.success('New session started', {
                     description: 'Previous chat cleared. Start a fresh conversation.',
