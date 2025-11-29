@@ -221,5 +221,65 @@ export interface TrainSchemaResponse {
   success: boolean;
   status: SchemaTrainingStatus;
   message: string;
-  cache?: ConnectionSchemaCache;
+  cache?: ConnectionSchemaCacheCamel;
+}
+
+export interface ColumnMetadataCamel {
+  name: string;
+  type: string;
+  nullable: boolean;
+  defaultValue?: string;
+  isPrimaryKey?: boolean;
+  isForeignKey?: boolean;
+  extra?: string;
+}
+
+export interface IndexMetadataCamel {
+  name: string;
+  columnName: string;
+  isUnique: boolean;
+  indexType?: string;
+}
+
+export interface ForeignKeyMetadataCamel {
+  columnName: string;
+  referencedTable: string;
+  referencedColumn: string;
+  constraintName: string;
+  updateRule?: string;
+  deleteRule?: string;
+}
+
+export interface TableMetadataCamel {
+  name: string;
+  schema: string;
+  columns: ColumnMetadataCamel[];
+  indexes: IndexMetadataCamel[];
+  foreignKeys: ForeignKeyMetadataCamel[];
+  rowCount?: number;
+}
+
+export interface SchemaMetadataCamel {
+  name: string;
+  tables: TableMetadataCamel[];
+}
+
+export interface CachedSchemaDataCamel {
+  schemas: SchemaMetadataCamel[];
+  totalTables: number;
+  totalColumns: number;
+  databaseType: DatabaseType;
+  version?: string;
+}
+
+export interface ConnectionSchemaCacheCamel {
+  id: string;
+  connectionId: string;
+  schemaData: CachedSchemaDataCamel;
+  trainingStatus: SchemaTrainingStatus;
+  trainingStartedAt?: string;
+  lastTrainedAt?: string;
+  errorMessage?: string;
+  createdAt: string;
+  updatedAt: string;
 }

@@ -9,7 +9,7 @@ export class TitleGenerationService {
     const apiKey = process.env.GEMINI_API_KEY;
     if (apiKey) {
       this.genAI = new GoogleGenerativeAI(apiKey);
-      this.model = this.genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+      this.model = this.genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
     } else {
       console.warn('GEMINI_API_KEY not found. Title generation will be unavailable.');
     }

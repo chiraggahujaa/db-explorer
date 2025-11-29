@@ -41,7 +41,7 @@ class WebSocketService {
       return;
     }
 
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
     this.socket = io(apiUrl, {
       auth: {

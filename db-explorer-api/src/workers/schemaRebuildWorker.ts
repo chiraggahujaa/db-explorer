@@ -109,8 +109,14 @@ export async function registerSchemaRebuildWorker(): Promise<void> {
           timestamp: new Date(),
         });
 
-        // Execute actual schema training
-        const schemaData = await schemaTrainingService.trainSchema(connectionId, userId, force || false);
+        // Execute actual schema training with selective schemas and config
+        const schemaData = await schemaTrainingService.trainSchema(
+          connectionId,
+          userId,
+          force || false,
+          schemas,
+          config
+        );
 
         if (!schemaData) {
           throw new Error('Failed to fetch schema data');

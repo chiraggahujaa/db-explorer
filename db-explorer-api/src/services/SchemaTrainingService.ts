@@ -3,14 +3,19 @@ import { ConnectionService } from './ConnectionService.js';
 import { DatabaseExplorerService } from './DatabaseExplorerService.js';
 import {
   ConnectionSchemaCache,
+  ConnectionSchemaCacheCamel,
   CachedSchemaData,
+  CachedSchemaDataCamel,
   SchemaMetadata,
+  SchemaMetadataCamel,
   TableMetadata,
+  TableMetadataCamel,
   ColumnMetadata,
   IndexMetadata,
   ForeignKeyMetadata,
   DatabaseType
 } from '../types/connection.js';
+import { SchemaTableSelection, TrainingConfig } from '../types/job.js';
 import { DataMapper } from '../utils/mappers.js';
 
 export class SchemaTrainingService {
@@ -25,12 +30,15 @@ export class SchemaTrainingService {
   /**
    * Train schema for a specific connection
    * This will fetch all schema metadata and store it in the cache
+   * Supports selective training of specific schemas/tables and intelligent merging
    */
   async trainSchema(
     connectionId: string,
     userId: string,
-    force: boolean = false
-  ): Promise<ConnectionSchemaCache> {
+    force: boolean = false,
+    schemas?: SchemaTableSelection[],
+    config?: TrainingConfig
+  ): Promise<ConnectionSchemaCacheCamel> {
     // Check if user has access to this connection
     const connection = await this.connectionService.getConnectionById(connectionId, userId);
     if (!connection) {
@@ -39,13 +47,13 @@ export class SchemaTrainingService {
 
     // Check if training is already in progress
     const existingCache = await this.getSchemaCache(connectionId);
-    if (existingCache && existingCache.training_status === 'training' && !force) {
+    if (existingCache && existingCache.trainingStatus === 'training' && !force) {
       throw new Error('Schema training is already in progress');
     }
 
     // Check if recently trained (within last hour) and force is not set
-    if (existingCache && existingCache.last_trained_at && !force) {
-      const lastTrained = new Date(existingCache.last_trained_at);
+    if (existingCache && existingCache.lastTrainedAt && !force) {
+      const lastTrained = new Date(existingCache.lastTrainedAt);
       const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
       if (lastTrained > oneHourAgo) {
         throw new Error('Schema was recently trained. Use force=true to re-train.');
@@ -56,11 +64,24 @@ export class SchemaTrainingService {
     await this.updateTrainingStatus(connectionId, 'training', new Date().toISOString());
 
     try {
-      // Fetch all schema metadata
-      const schemaData = await this.fetchAllSchemaMetadata(connectionId, userId);
+      // Fetch schema metadata (selective or full)
+      const schemaData = await this.fetchAllSchemaMetadata(
+        connectionId,
+        userId,
+        schemas,
+        config
+      );
 
-      // Store in cache
-      const cache = await this.saveSchemaCache(connectionId, schemaData, 'completed');
+      // Determine if this is selective training
+      const isSelectiveTraining = schemas && schemas.length > 0;
+
+      // Store in cache with intelligent merging
+      const cache = await this.saveSchemaCache(
+        connectionId,
+        schemaData,
+        'completed',
+        isSelectiveTraining
+      );
 
       return cache;
     } catch (error) {
@@ -77,10 +98,13 @@ export class SchemaTrainingService {
 
   /**
    * Fetch all schema metadata for a connection
+   * Supports selective training of specific schemas/tables
    */
   private async fetchAllSchemaMetadata(
     connectionId: string,
-    userId: string
+    userId: string,
+    schemas?: SchemaTableSelection[],
+    config?: TrainingConfig
   ): Promise<CachedSchemaData> {
     // Get connection config
     const connectionResponse = await this.connectionService.getConnectionByIdInternal(connectionId, userId);
@@ -89,45 +113,83 @@ export class SchemaTrainingService {
     }
     const connection = connectionResponse.data;
 
-    const schemas: SchemaMetadata[] = [];
+    // Set default config values
+    const trainingConfig: Required<TrainingConfig> = {
+      includeSchemaMetadata: config?.includeSchemaMetadata ?? true,
+      includeTableMetadata: config?.includeTableMetadata ?? true,
+      includeColumnMetadata: config?.includeColumnMetadata ?? true,
+      includeIndexes: config?.includeIndexes ?? true,
+      includeForeignKeys: config?.includeForeignKeys ?? true,
+      includeConstraints: config?.includeConstraints ?? true,
+      includeRowCounts: config?.includeRowCounts ?? true,
+      includeSampleData: config?.includeSampleData ?? false,
+      sampleDataRowCount: config?.sampleDataRowCount ?? 5,
+    };
+
+    const schemaMetadata: SchemaMetadata[] = [];
     let totalTables = 0;
     let totalColumns = 0;
 
-    // Get all schemas/databases
-    const schemasResponse = await this.explorerService.getSchemas(connectionId, userId);
-    if (!schemasResponse.success || !schemasResponse.data) {
-      throw new Error(schemasResponse.error || 'Failed to fetch schemas');
+    // Determine which schemas to train
+    let schemasToTrain: string[];
+
+    if (schemas && schemas.length > 0) {
+      // Selective training: use provided schemas
+      schemasToTrain = schemas.map(s => s.schema);
+    } else {
+      // Full training: get all schemas
+      const schemasResponse = await this.explorerService.getSchemas(connectionId, userId);
+      if (!schemasResponse.success || !schemasResponse.data) {
+        throw new Error(schemasResponse.error || 'Failed to fetch schemas');
+      }
+      schemasToTrain = schemasResponse.data.map(s => s.name);
     }
-    const schemaList = schemasResponse.data.map(s => s.name);
 
     // For each schema, get all tables and their metadata
-    for (const schemaName of schemaList) {
+    for (const schemaName of schemasToTrain) {
       const tables: TableMetadata[] = [];
 
-      // Get tables in this schema
-      const tablesResponse = await this.explorerService.getTables(connectionId, userId, schemaName);
-      if (!tablesResponse.success || !tablesResponse.data) {
-        continue;
+      // Determine which tables to train in this schema
+      let tablesToTrain: string[];
+
+      const schemaSelection = schemas?.find(s => s.schema === schemaName);
+      if (schemaSelection && schemaSelection.tables && schemaSelection.tables.length > 0) {
+        // Selective training: use specified tables
+        tablesToTrain = schemaSelection.tables;
+      } else {
+        // Train all tables in this schema
+        const tablesResponse = await this.explorerService.getTables(connectionId, userId, schemaName);
+        if (!tablesResponse.success || !tablesResponse.data) {
+          continue;
+        }
+        tablesToTrain = tablesResponse.data.map(t => t.name);
       }
-      const tableList = tablesResponse.data.map(t => t.name);
 
-      for (const tableName of tableList) {
+      for (const tableName of tablesToTrain) {
         try {
-          // Get table columns
-          const columns = await this.fetchTableColumns(connection, schemaName, tableName, connectionId, userId);
+          // Get table columns (if enabled)
+          const columns = trainingConfig.includeColumnMetadata
+            ? await this.fetchTableColumns(connection, schemaName, tableName, connectionId, userId)
+            : [];
 
-          // Get table indexes
-          const indexes = await this.fetchTableIndexes(connection, schemaName, tableName, connectionId, userId);
+          // Get table indexes (if enabled)
+          const indexes = trainingConfig.includeIndexes
+            ? await this.fetchTableIndexes(connection, schemaName, tableName, connectionId, userId)
+            : [];
 
-          // Get foreign keys
-          const foreignKeys = await this.fetchTableForeignKeys(connection, schemaName, tableName, connectionId, userId);
+          // Get foreign keys (if enabled)
+          const foreignKeys = trainingConfig.includeForeignKeys
+            ? await this.fetchTableForeignKeys(connection, schemaName, tableName, connectionId, userId)
+            : [];
 
-          // Get approximate row count (optional, can be slow for large tables)
+          // Get approximate row count (if enabled)
           let rowCount: number | undefined;
-          try {
-            rowCount = await this.fetchTableRowCount(connection, schemaName, tableName, connectionId, userId);
-          } catch (error) {
-            // Row count is optional, continue if it fails
+          if (trainingConfig.includeRowCounts) {
+            try {
+              rowCount = await this.fetchTableRowCount(connection, schemaName, tableName, connectionId, userId);
+            } catch (error) {
+              // Row count is optional, continue if it fails
+            }
           }
 
           const tableMetadata: TableMetadata = {
@@ -150,7 +212,7 @@ export class SchemaTrainingService {
       }
 
       totalTables += tables.length;
-      schemas.push({
+      schemaMetadata.push({
         name: schemaName,
         tables
       });
@@ -159,7 +221,7 @@ export class SchemaTrainingService {
     const version = await this.fetchDatabaseVersion(connectionId, userId);
     const dbType = (connection as any).dbType || connection.db_type;
     const schemaData: CachedSchemaData = {
-      schemas,
+      schemas: schemaMetadata,
       total_tables: totalTables,
       total_columns: totalColumns,
       database_type: dbType
@@ -542,7 +604,7 @@ export class SchemaTrainingService {
   /**
    * Get schema cache for a connection
    */
-  async getSchemaCache(connectionId: string): Promise<ConnectionSchemaCache | null> {
+  async getSchemaCache(connectionId: string): Promise<ConnectionSchemaCacheCamel | null> {
     const { data, error } = await supabaseAdmin
       .from('connection_schema_cache')
       .select('*')
@@ -556,7 +618,7 @@ export class SchemaTrainingService {
       throw error;
     }
 
-    return DataMapper.toCamelCase(data) as ConnectionSchemaCache;
+    return DataMapper.toCamelCase(data) as ConnectionSchemaCacheCamel;
   }
 
   /**
@@ -611,23 +673,120 @@ export class SchemaTrainingService {
   }
 
   /**
-   * Save schema cache
+   * Intelligently merge table metadata
+   * When re-training specific tables, update only those tables and keep others intact
+   */
+  private mergeTables(existingTables: TableMetadataCamel[], incomingTables: TableMetadataCamel[]): TableMetadataCamel[] {
+    const mergedTables: TableMetadataCamel[] = [];
+    const existingTableMap = new Map(existingTables.map(t => [t.name, t]));
+    const incomingTableMap = new Map(incomingTables.map(t => [t.name, t]));
+
+    // Get all unique table names
+    const allTableNames = new Set([...existingTableMap.keys(), ...incomingTableMap.keys()]);
+
+    for (const tableName of allTableNames) {
+      const incomingTable = incomingTableMap.get(tableName);
+      const existingTable = existingTableMap.get(tableName);
+
+      if (incomingTable) {
+        // Table was re-trained: use new data (always fresher)
+        mergedTables.push(incomingTable);
+      } else if (existingTable) {
+        // Table not re-trained: keep existing data
+        mergedTables.push(existingTable);
+      }
+    }
+
+    return mergedTables;
+  }
+
+  /**
+   * Intelligently merge schema metadata
+   * Handles selective training by merging new training data with existing cache
+   */
+  private mergeSchemaData(existing: CachedSchemaDataCamel, incoming: CachedSchemaDataCamel): CachedSchemaDataCamel {
+    const mergedSchemas: SchemaMetadataCamel[] = [];
+    const existingSchemaMap = new Map(existing.schemas.map(s => [s.name, s]));
+    const incomingSchemaMap = new Map(incoming.schemas.map(s => [s.name, s]));
+
+    // Get all unique schema names
+    const allSchemaNames = new Set([...existingSchemaMap.keys(), ...incomingSchemaMap.keys()]);
+
+    for (const schemaName of allSchemaNames) {
+      const existingSchema = existingSchemaMap.get(schemaName);
+      const incomingSchema = incomingSchemaMap.get(schemaName);
+
+      if (!existingSchema && incomingSchema) {
+        // New schema: add it
+        mergedSchemas.push(incomingSchema);
+      } else if (existingSchema && !incomingSchema) {
+        // Schema not in new training: keep existing
+        mergedSchemas.push(existingSchema);
+      } else if (existingSchema && incomingSchema) {
+        // Both exist: merge tables intelligently
+        const mergedTables = this.mergeTables(existingSchema.tables, incomingSchema.tables);
+        mergedSchemas.push({
+          name: schemaName,
+          tables: mergedTables
+        });
+      }
+    }
+
+    // Recalculate totals
+    const totalTables = mergedSchemas.reduce((sum, s) => sum + s.tables.length, 0);
+    const totalColumns = mergedSchemas.reduce(
+      (sum, s) => sum + s.tables.reduce((tSum, t) => tSum + t.columns.length, 0),
+      0
+    );
+
+    const result: CachedSchemaDataCamel = {
+      schemas: mergedSchemas,
+      totalTables: totalTables,
+      totalColumns: totalColumns,
+      databaseType: incoming.databaseType,
+      ...(incoming.version ? { version: incoming.version } : {})
+    };
+
+    return result;
+  }
+
+  /**
+   * Save schema cache with intelligent merging
+   * If selective training, merges with existing data; otherwise replaces completely
    */
   private async saveSchemaCache(
     connectionId: string,
     schemaData: CachedSchemaData,
-    status: 'completed' | 'failed'
-  ): Promise<ConnectionSchemaCache> {
+    status: 'completed' | 'failed',
+    isSelectiveTraining: boolean = false
+  ): Promise<ConnectionSchemaCacheCamel> {
+    // Check if cache exists
+    const existing = await this.getSchemaCache(connectionId);
+
+    // Determine final schema data based on training mode
+    let finalSchemaData: CachedSchemaDataCamel;
+
+    // Convert incoming snake_case data to camelCase for processing
+    const incomingCamel = DataMapper.toCamelCase(schemaData) as unknown as CachedSchemaDataCamel;
+
+    if (existing && existing.schemaData && isSelectiveTraining) {
+      // Selective training: intelligently merge with existing data
+      console.log(`[SchemaTraining] Merging selective training data for connection ${connectionId}`);
+      finalSchemaData = this.mergeSchemaData(existing.schemaData, incomingCamel);
+      console.log(`[SchemaTraining] Merge complete: ${finalSchemaData.totalTables} tables, ${finalSchemaData.totalColumns} columns`);
+    } else {
+      // Full training or no existing cache: use new data completely
+      console.log(`[SchemaTraining] Full replacement for connection ${connectionId}`);
+      finalSchemaData = incomingCamel;
+    }
+
     const cacheData = {
       connection_id: connectionId,
-      schema_data: schemaData,
+      schema_data: finalSchemaData,
       training_status: status,
       last_trained_at: new Date().toISOString(),
       error_message: null
     };
-
-    // Check if cache exists
-    const existing = await this.getSchemaCache(connectionId);
 
     let result;
     if (existing) {
@@ -653,7 +812,7 @@ export class SchemaTrainingService {
       result = data;
     }
 
-    return DataMapper.toCamelCase(result) as ConnectionSchemaCache;
+    return DataMapper.toCamelCase(result) as ConnectionSchemaCacheCamel;
   }
 
   /**

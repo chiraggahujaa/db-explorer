@@ -25,14 +25,14 @@ export class SchemaTrainingController {
         });
       }
 
-      const connectionId = req.params.id;
+      const connectionId = req.params.id!;
       const force = req.body.force === true || req.query.force === 'true';
 
-      const cache = await this.trainingService.trainSchema(connectionId, userId, force);
+      const cache = await this.trainingService.trainSchema(connectionId as string, userId as string, force);
 
       const response: TrainSchemaResponse = {
         success: true,
-        status: cache.training_status,
+        status: cache.trainingStatus,
         message: 'Schema training completed successfully',
         cache,
       };
@@ -88,10 +88,10 @@ export class SchemaTrainingController {
         });
       }
 
-      const connectionId = req.params.id;
+      const connectionId = req.params.id!;
 
       // Verify user has access to this connection (will throw if not)
-      const cache = await this.trainingService.getSchemaCache(connectionId);
+      const cache = await this.trainingService.getSchemaCache(connectionId as string);
 
       if (!cache) {
         return res.status(404).json({
@@ -127,9 +127,9 @@ export class SchemaTrainingController {
         });
       }
 
-      const connectionId = req.params.id;
+      const connectionId = req.params.id!;
 
-      await this.trainingService.deleteSchemaCache(connectionId);
+      await this.trainingService.deleteSchemaCache(connectionId as string);
 
       res.status(200).json({
         success: true,
