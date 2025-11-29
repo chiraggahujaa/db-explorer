@@ -32,7 +32,10 @@
       "Bash(bash /tmp/test_chat.sh:*)",
       "Bash(timeout 10 bash:*)",
       "Bash(ps:*)",
-      "Bash(npx shadcn@latest:*)"
+      "Bash(npx shadcn@latest:*)",
+      "Bash(timeout 10 npm run dev:*)",
+      "Bash(npm run lint:*)",
+      "Bash(npx eslint:*)"
     ],
     "deny": [],
     "ask": []
