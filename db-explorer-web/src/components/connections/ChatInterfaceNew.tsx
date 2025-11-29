@@ -142,6 +142,8 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
   const [isRetrainModalOpen, setIsRetrainModalOpen] = useState(false);
   const [schemaError, setSchemaError] = useState<string | null>(null);
   const [isToolSidebarOpen, setIsToolSidebarOpen] = useState(false);
+  const [currentStatusMessage, setCurrentStatusMessage] = useState("Ready");
+  const [statusMessageIndex, setStatusMessageIndex] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const { chatConfig } = useConnectionExplorer();
@@ -267,11 +269,12 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
     .reverse(); // Reverse to show latest at top
 
   // Auto-open sidebar when new tool calls appear - DISABLED
-  // useEffect(() => {
-  //   if (allToolCalls.length > 0 && !isToolSidebarOpen) {
-  //     setIsToolSidebarOpen(true);
-  //   }
-  // }, [allToolCalls.length, isToolSidebarOpen]);
+  useEffect(() => {
+    if (allToolCalls.length > 0 && !isToolSidebarOpen) {
+      setIsToolSidebarOpen(true);
+    }
+  }, [allToolCalls.length]);
+
 
   // Load chat history on mount and when chatSessionId changes
   useEffect(() => {
@@ -355,6 +358,40 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
   const isLoading = status === 'streaming' || status === 'submitted';
   const hasMessages = messages.length > 0;
   const isResumingChat = chatSessionId && chatHistory.length > 0;
+
+  // Dynamic status messages during processing
+  const statusMessages = [
+    "Analyzing your request...",
+    "Processing database schema...",
+    "Executing queries...",
+    "Analyzing results...",
+    "Generating response...",
+  ];
+
+  // Update status message during loading or tool execution
+  useEffect(() => {
+    // Check if we should show status messages
+    const shouldShowStatusMessages = isLoading || allToolCalls.some(tc =>
+      tc.status === 'running' || tc.state === 'input-streaming' || tc.state === 'input-available'
+    );
+
+    if (!shouldShowStatusMessages) {
+      setCurrentStatusMessage("Ready");
+      setStatusMessageIndex(0);
+      return;
+    }
+
+    const interval = setInterval(() => {
+      setStatusMessageIndex((prev) => {
+        const next = (prev + 1) % statusMessages.length;
+        setCurrentStatusMessage(statusMessages[next]);
+        return next;
+      });
+    }, 2000); // Change message every 2 seconds
+
+    return () => clearInterval(interval);
+  }, [isLoading, allToolCalls, statusMessages]);
+
 
   return (
     <>
@@ -562,7 +599,7 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
                         </div>
                       </div>
                     ) : (
-                      // AI Response - only show text, tool calls are in sidebar
+                      // AI Response
                       <div className="flex gap-3 mb-4">
                         <div className="flex-shrink-0">
                           <div className="flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 dark:from-blue-600 dark:to-purple-700 shadow-sm">
@@ -582,9 +619,13 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
                               ))}
                             </div>
                           )}
-                          <div className="bg-card rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm border">
-                            <MessageMarkdown content={messageText} />
-                          </div>
+
+                          {/* Final AI Response */}
+                          {messageText && (
+                            <div className="bg-card rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm border">
+                              <MessageMarkdown content={messageText} />
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}
@@ -604,7 +645,7 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
                     <div className="bg-card rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm border">
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        <span>Thinking...</span>
+                        <span>{currentStatusMessage}</span>
                       </div>
                     </div>
                   </div>
