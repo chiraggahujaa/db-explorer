@@ -14,7 +14,6 @@ interface MessageMarkdownProps {
   className?: string;
 }
 
-// Code Block component with syntax highlighting and copy button
 function CodeBlock({ code, language }: { code: string; language: string }) {
   const [copied, setCopied] = useState(false);
 
@@ -77,19 +76,16 @@ export function MessageMarkdown({ content, className }: MessageMarkdownProps) {
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
-        // Customize paragraph styling
         p: ({ node, children, ...props }) => (
           <p className="text-sm leading-relaxed mb-2 last:mb-0" {...props}>
             {children}
           </p>
         ),
-        // Customize strong (bold) styling
         strong: ({ node, children, ...props }) => (
           <strong className="font-semibold text-primary" {...props}>
             {children}
           </strong>
         ),
-        // Customize list styling
         ul: ({ node, children, ...props }) => (
           <ul className="space-y-1 my-2" {...props}>
             {children}
@@ -100,7 +96,6 @@ export function MessageMarkdown({ content, className }: MessageMarkdownProps) {
             {children}
           </li>
         ),
-        // Customize code blocks with syntax highlighting
         code: ({ node, inline, className, children, ...props }: any) => {
           const match = /language-(\w+)/.exec(className || '');
           const language = match ? match[1] : '';
@@ -117,7 +112,6 @@ export function MessageMarkdown({ content, className }: MessageMarkdownProps) {
             );
           }
 
-          // Use syntax highlighter for code blocks, especially SQL
           if (language) {
             return <CodeBlock code={codeString} language={language} />;
           }
@@ -134,13 +128,15 @@ export function MessageMarkdown({ content, className }: MessageMarkdownProps) {
             </code>
           );
         },
-        // Customize pre blocks
-        pre: ({ node, children, ...props }) => (
-          <div className="relative my-2" {...props}>
-            {children}
-          </div>
-        ),
-        // Customize headings
+        pre: ({ node, children, ...props }) => {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const { ref, ...divProps } = props as any;
+          return (
+            <div className="relative my-2" {...divProps}>
+              {children}
+            </div>
+          );
+        },
         h1: ({ node, children, ...props }) => (
           <h1 className="text-lg font-bold mb-2 mt-4 first:mt-0" {...props}>
             {children}
@@ -156,7 +152,6 @@ export function MessageMarkdown({ content, className }: MessageMarkdownProps) {
             {children}
           </h3>
         ),
-        // Customize blockquotes
         blockquote: ({ node, children, ...props }) => (
           <blockquote
             className="border-l-4 border-primary/30 pl-4 py-1 my-2 italic text-muted-foreground"
@@ -165,7 +160,6 @@ export function MessageMarkdown({ content, className }: MessageMarkdownProps) {
             {children}
           </blockquote>
         ),
-        // Customize tables
         table: ({ node, children, ...props }) => (
           <div className="overflow-x-auto my-2">
             <table className="min-w-full divide-y divide-border" {...props}>
@@ -196,7 +190,6 @@ export function MessageMarkdown({ content, className }: MessageMarkdownProps) {
             {children}
           </td>
         ),
-        // Customize links
         a: ({ node, children, ...props }) => (
           <a
             className="text-primary hover:text-primary/80 underline font-medium"
@@ -207,7 +200,6 @@ export function MessageMarkdown({ content, className }: MessageMarkdownProps) {
             {children}
           </a>
         ),
-        // Customize horizontal rules
         hr: ({ node, ...props }) => (
           <hr className="my-4 border-border" {...props} />
         ),
