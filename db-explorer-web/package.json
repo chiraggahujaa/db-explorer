@@ -13,7 +13,7 @@
     "validate": "lefthook run pre-commit",
     "hooks:install": "lefthook install",
     "hooks:uninstall": "lefthook uninstall",
-    "postinstall": "lefthook install"
+    "postinstall": "test -d .git && lefthook install || echo 'Skipping lefthook install - not a git repository'"
   },
   "dependencies": {
     "@ai-sdk/google": "^2.0.39",

@@ -1,16 +1,17 @@
-/**
- * Chat Interface using Vercel AI SDK v5
- * Built following official AI SDK UI documentation
- */
-
 "use client";
 
 import { useState, useEffect, useRef } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls } from "ai";
-import { Send, Sparkles, Database, Loader2, Square, RefreshCw, ChevronDown, ChevronUp, Plus } from "lucide-react";
+import { Send, Sparkles, Database, Loader2, Square, ChevronDown, ChevronUp, Plus, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import type { ConnectionWithRole } from "@/types/connection";
 import { MessageMarkdown } from "./MessageMarkdown";
 import { RetrainSchemaModal } from "./RetrainSchemaModal";
@@ -21,6 +22,7 @@ import { ChatConfigPopover } from "./ChatConfigPopover";
 import { SQLDisplay } from "./SQLDisplay";
 import { useChatStore } from "@/stores/useChatStore";
 import { useConnectionExplorer } from "@/contexts/ConnectionExplorerContext";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { cn } from "@/utils/ui";
 import { getContextManager } from "@/utils/contextManager";
@@ -31,7 +33,6 @@ interface ChatInterfaceNewProps {
   onNewChat?: () => void;
 }
 
-// Collapsible message component for long user messages
 function CollapsibleMessage({ content, maxLines = 3 }: { content: string; maxLines?: number }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const lines = content.split('\n');
@@ -50,7 +51,7 @@ function CollapsibleMessage({ content, maxLines = 3 }: { content: string; maxLin
       <p className="text-sm whitespace-pre-wrap break-words">{previewContent}</p>
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="flex items-center gap-1 text-xs text-primary-foreground/80 hover:text-primary-foreground transition-colors"
+        className="flex items-center gap-1 text-xs text-primary-foreground/90 hover:text-primary-foreground hover:underline transition-all cursor-pointer font-medium"
       >
         {isExpanded ? (
           <>
@@ -68,7 +69,6 @@ function CollapsibleMessage({ content, maxLines = 3 }: { content: string; maxLin
   );
 }
 
-// Helper to extract text from UIMessage parts
 function getMessageText(message: any): string {
   if (typeof message.content === 'string') {
     return message.content;
@@ -82,28 +82,22 @@ function getMessageText(message: any): string {
   return '';
 }
 
-// Helper to extract tool calls from UIMessage parts
 function getToolCalls(message: any): any[] {
   if (!message.parts || !Array.isArray(message.parts)) {
     return [];
   }
-  // Tool parts have type like 'tool-list_tables', 'tool-describe_table', etc.
-  // or 'dynamic-tool' for dynamic tools
   return message.parts.filter((part: any) =>
     part.type?.startsWith('tool-') || part.type === 'dynamic-tool'
   );
 }
 
-// Helper to extract SQL from tool calls
 function extractSQLFromToolCalls(toolCalls: any[]): string[] {
   const sqlQueries: string[] = [];
 
   for (const toolCall of toolCalls) {
-    // Check if this is a query-related tool call
     const toolName = toolCall.type?.replace('tool-', '') || toolCall.toolName;
     const args = toolCall.args || {};
 
-    // Generate SQL based on tool type
     if (toolName === 'select_data' && args.table && args.database) {
       const columns = args.columns?.join(', ') || '*';
       let sql = `SELECT ${columns} FROM \`${args.database}\`.\`${args.table}\``;
@@ -148,23 +142,23 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const { chatConfig } = useConnectionExplorer();
   const titleGeneratedRef = useRef<boolean>(false);
+  const queryClient = useQueryClient();
 
-  // Get sidebar selection context
-  const { selectedSchema, selectedTables } = useConnectionExplorer();
+  const { selectedSchema, selectedTables, setSelectedSchema: setSelectedSchemaInContext, setSelectedTables: setSelectedTablesInContext } = useConnectionExplorer();
 
-  // Use ref to always get latest selectedSchema, selectedTables and chatConfig values in dynamic body function
   const selectedSchemaRef = useRef(selectedSchema);
   selectedSchemaRef.current = selectedSchema;
   const selectedTablesRef = useRef(selectedTables);
   const chatConfigRef = useRef(chatConfig);
   chatConfigRef.current = chatConfig;
 
-  // Update selectedTables ref whenever it changes
+  const lastProcessedUserMessageRef = useRef<string | null>(null);
+  const lastSentUserMessageRef = useRef<string | null>(null);
+
   useEffect(() => {
     selectedTablesRef.current = selectedTables;
   }, [selectedTables]);
 
-  // Get chat session state from store
   const {
     currentChatSessionId,
     currentChatSession,
@@ -176,11 +170,12 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
     clearCurrentChat,
   } = useChatStore();
 
-  // Calculate context window status
+  const currentChatSessionIdRef = useRef<string | null>(currentChatSessionId);
+  currentChatSessionIdRef.current = currentChatSessionId;
+
   const contextManager = getContextManager();
   const contextWindow = contextManager.getContextWindow(chatHistory);
 
-  // Use Vercel AI SDK's useChat hook (v5 API)
   const {
     messages,
     status,
@@ -195,11 +190,9 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
     transport: new DefaultChatTransport({
       api: '/api/chat',
       headers: () => {
-        // Dynamic header function - called for each request
         const token = typeof window !== 'undefined'
           ? localStorage.getItem('access_token') || sessionStorage.getItem('access_token')
           : null;
-
 
         return {
           'Content-Type': 'application/json',
@@ -207,8 +200,6 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
         };
       },
       body: () => {
-        // Dynamic body function - called for each request to get latest context
-        // Use ref to get the latest selectedSchema, selectedTables and chatConfig values
         const currentSchema = selectedSchemaRef.current;
         const currentChatConfig = chatConfigRef.current;
         const currentSelectedTables = Array.from(selectedTablesRef.current);
@@ -225,7 +216,6 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
     onError: (error) => {
       console.error('[ChatInterface] Error:', error);
 
-      // Check if it's a schema training error
       if (error.message.includes('Schema not trained') || error.message.includes('needsTraining')) {
         setSchemaError('Schema not trained. Please train the schema first.');
         toast.error('Schema not trained', {
@@ -242,51 +232,82 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
       }
     },
     onFinish: async ({ message }) => {
-      console.log('[ChatInterface] Message completed:', message);
+      const sessionId = currentChatSessionIdRef.current;
 
-      // Save to chat history
-      if (currentChatSessionId && messages.length > 0) {
-        // Get the user message (should be the last message before the assistant response)
-        const userMessage = messages[messages.length - 1];
-        const userText = getMessageText(userMessage);
-        const assistantText = getMessageText(message);
+      if (!sessionId) {
+        console.error('[ChatInterface] No chat session to save to (checked ref)');
+        return;
+      }
 
-        // Save both messages
+      const userText = lastSentUserMessageRef.current;
+      const assistantText = getMessageText(message);
+
+      if (!userText) {
+        console.error('[ChatInterface] No user message found in ref - this should not happen');
+        return;
+      }
+
+      if (!assistantText || assistantText.trim().length === 0) {
+        return;
+      }
+
+      const messageKey = `${sessionId}:${userText}`;
+      if (lastProcessedUserMessageRef.current === messageKey) {
+        return;
+      }
+
+      try {
         await saveChatMessages(userText, assistantText);
+        lastProcessedUserMessageRef.current = messageKey;
+        queryClient.invalidateQueries({ queryKey: ["chat-sessions", connection.id] });
 
-        // Generate title for first exchange if needed
-        if (!titleGeneratedRef.current && messages.length === 1) {
+        if (!titleGeneratedRef.current) {
+          console.log('[ChatInterface] Generating title for first exchange (after messages saved)');
           await generateChatTitle(userText);
           titleGeneratedRef.current = true;
+          console.log('[ChatInterface] Title generated successfully!');
+          queryClient.invalidateQueries({ queryKey: ["chat-sessions", connection.id] });
         }
+      } catch (error) {
+        console.error('[ChatInterface] Failed to save messages:', error);
+        toast.error('Failed to save chat history');
       }
     },
   });
 
-  // Collect all tool calls from all messages (latest first)
   const allToolCalls = messages
     .flatMap(msg => getToolCalls(msg))
-    .reverse(); // Reverse to show latest at top
+    .reverse();
 
-  // Auto-open sidebar when new tool calls appear - DISABLED
   useEffect(() => {
     if (allToolCalls.length > 0 && !isToolSidebarOpen) {
       setIsToolSidebarOpen(true);
     }
   }, [allToolCalls.length]);
 
-
-  // Load chat history on mount and when chatSessionId changes
   useEffect(() => {
     const loadExistingChat = async () => {
       if (chatSessionId) {
         console.log('[ChatInterface] Loading existing chat:', chatSessionId);
         await loadChatHistory(chatSessionId);
 
-        // Load history into useChat
-        const { chatHistory: loadedHistory } = useChatStore.getState();
+        const { currentChatSession, chatHistory: loadedHistory } = useChatStore.getState();
+
+        if (currentChatSession) {
+          console.log('[ChatInterface] Restoring context from chat session');
+
+          if (currentChatSession.selectedSchema) {
+            console.log('[ChatInterface] Restoring schema:', currentChatSession.selectedSchema);
+            setSelectedSchemaInContext(currentChatSession.selectedSchema);
+          }
+
+          if (currentChatSession.selectedTables && currentChatSession.selectedTables.length > 0) {
+            console.log('[ChatInterface] Restoring tables:', currentChatSession.selectedTables);
+            setSelectedTablesInContext(currentChatSession.selectedTables);
+          }
+        }
+
         if (loadedHistory && loadedHistory.length > 0) {
-          // Convert to UIMessage format
           const uiMessages = loadedHistory.map((msg: any) => ({
             id: msg.id,
             role: msg.role,
@@ -294,19 +315,20 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
           }));
           setMessages(uiMessages as any);
           titleGeneratedRef.current = true;
+          lastProcessedUserMessageRef.current = null;
         }
       } else {
         console.log('[ChatInterface] Starting new chat');
         clearCurrentChat();
         setMessages([]);
         titleGeneratedRef.current = false;
+        lastProcessedUserMessageRef.current = null;
       }
     };
 
     loadExistingChat();
-  }, [chatSessionId, connection.id, loadChatHistory, clearCurrentChat, setMessages]);
+  }, [chatSessionId, connection.id, loadChatHistory, clearCurrentChat, setMessages, setSelectedSchemaInContext, setSelectedTablesInContext]);
 
-  // Auto-scroll to bottom
   useEffect(() => {
     if (scrollContainerRef.current) {
       scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
@@ -317,13 +339,22 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
     e.preventDefault();
 
     const messageToSend = input.trim();
+    console.log('[ChatInterface] handleSubmit called with message:', messageToSend.substring(0, 50));
+    console.log('[ChatInterface] Current status:', status);
+    console.log('[ChatInterface] Current chat session ID:', currentChatSessionId);
+
     if (!messageToSend || status === 'streaming' || status === 'submitted') {
+      console.log('[ChatInterface] Skipping submit - invalid state');
       return;
     }
 
-    // Create chat session if needed
     if (!currentChatSessionId) {
-      console.log('[ChatInterface] Creating new chat session');
+      console.log('[ChatInterface] No current session, creating new chat session...');
+      console.log('[ChatInterface] Connection ID:', connection.id);
+      console.log('[ChatInterface] Selected schema:', selectedSchema);
+      console.log('[ChatInterface] Selected tables:', Array.from(selectedTables));
+      console.log('[ChatInterface] Chat config:', chatConfig);
+
       const newSession = await createNewChat(
         connection.id,
         selectedSchema,
@@ -331,16 +362,28 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
         chatConfig
       );
 
+      console.log('[ChatInterface] New session result:', newSession);
+
       if (!newSession) {
+        console.error('[ChatInterface] Failed to create chat session');
         toast.error('Failed to create chat session');
         return;
       }
+
+      console.log('[ChatInterface] Chat session created successfully:', newSession.id);
+
+      currentChatSessionIdRef.current = newSession.id;
+      console.log('[ChatInterface] Updated session ID ref to:', newSession.id);
+    } else {
+      console.log('[ChatInterface] Using existing session:', currentChatSessionId);
     }
 
-    // Clear input immediately
+    lastSentUserMessageRef.current = messageToSend;
+    console.log('[ChatInterface] Stored user message in ref for later retrieval');
+    lastProcessedUserMessageRef.current = null;
+    console.log('[ChatInterface] Cleared processed message ref for new message');
     setInput("");
-
-    // Send message using AI SDK v5 API
+    console.log('[ChatInterface] Sending message to AI...');
     sendMessage({ text: messageToSend });
   };
 
@@ -359,7 +402,6 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
   const hasMessages = messages.length > 0;
   const isResumingChat = chatSessionId && chatHistory.length > 0;
 
-  // Dynamic status messages during processing
   const statusMessages = [
     "Analyzing your request...",
     "Processing database schema...",
@@ -368,9 +410,7 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
     "Generating response...",
   ];
 
-  // Update status message during loading or tool execution
   useEffect(() => {
-    // Check if we should show status messages
     const shouldShowStatusMessages = isLoading || allToolCalls.some(tc =>
       tc.status === 'running' || tc.state === 'input-streaming' || tc.state === 'input-available'
     );
@@ -387,7 +427,7 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
         setCurrentStatusMessage(statusMessages[next]);
         return next;
       });
-    }, 2000); // Change message every 2 seconds
+    }, 2000);
 
     return () => clearInterval(interval);
   }, [isLoading, allToolCalls, statusMessages]);
@@ -395,9 +435,7 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
 
   return (
     <>
-      {/* Main Chat Area */}
       <div className="flex-1 flex flex-col h-full overflow-hidden bg-gradient-to-b from-background to-muted/20">
-        {/* Header */}
       <div className="flex-shrink-0 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container max-w-4xl mx-auto px-4 py-2">
           <div className="flex items-center justify-between">
@@ -413,54 +451,6 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  // Always clear messages immediately first
-                  console.log('[ChatInterface] Clearing messages for new session');
-                  setMessages([]);
-                  titleGeneratedRef.current = false;
-
-                  if (onNewChat) {
-                    onNewChat();
-                  } else {
-                    // Fallback: Clear current chat state locally
-                    clearCurrentChat();
-                  }
-                  toast.success('New session started', {
-                    description: 'Previous chat cleared. Start a fresh conversation.',
-                  });
-                }}
-                title="Start a new chat session without previous context"
-                className="gap-2"
-              >
-                <Plus className="w-4 h-4" />
-                <span className="hidden sm:inline">New Session</span>
-              </Button>
-
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsRetrainModalOpen(true)}
-                title="Re-train schema cache for AI understanding"
-                className="gap-2"
-              >
-                <RefreshCw className="w-4 h-4" />
-                <span className="hidden sm:inline">Re-train Schema</span>
-              </Button>
-
-              {/* Context Window Indicator */}
-              {chatHistory.length > 0 && (
-                <ContextIndicator
-                  percentageUsed={contextWindow.percentageUsed}
-                  totalTokens={contextWindow.totalTokens}
-                  maxTokens={contextManager.getConfig().maxTokens}
-                  messageCount={chatHistory.length}
-                />
-              )}
-
-              {/* Connection Status */}
               {schemaError ? (
                 <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-100 dark:bg-red-900/30">
                   <div className="w-1.5 h-1.5 rounded-full bg-red-500 dark:bg-red-400" />
@@ -472,15 +462,72 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
                   <span className="text-xs font-medium text-green-700 dark:text-green-400">Ready</span>
                 </div>
               )}
+
+              {chatHistory.length > 0 && (
+                <ContextIndicator
+                  percentageUsed={contextWindow.percentageUsed}
+                  totalTokens={contextWindow.totalTokens}
+                  maxTokens={contextManager.getConfig().maxTokens}
+                  messageCount={chatHistory.length}
+                />
+              )}
+
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-9 w-9"
+                      onClick={() => setIsRetrainModalOpen(true)}
+                    >
+                      <RotateCcw className="w-4 h-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Re-train Schema</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-9 w-9"
+                      onClick={() => {
+                        console.log('[ChatInterface] Clearing messages for new session');
+                        setMessages([]);
+                        titleGeneratedRef.current = false;
+                        lastProcessedUserMessageRef.current = null;
+
+                        if (onNewChat) {
+                          onNewChat();
+                        } else {
+                          clearCurrentChat();
+                        }
+                        toast.success('New session started', {
+                          description: 'Previous chat cleared. Start a fresh conversation.',
+                        });
+                      }}
+                    >
+                      <Plus className="w-4 h-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>New Session</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Chat Content Area - Scrollable */}
       <div ref={scrollContainerRef} className="flex-1 overflow-y-auto overflow-x-hidden min-h-0">
         {!hasMessages ? (
-          // Welcome Screen - centered in full available height
           <div className="h-full flex items-center justify-center px-4">
             <div className="w-full max-w-2xl mx-auto text-center">
               <div className="mb-6">
@@ -496,7 +543,6 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
                 Just ask in natural language or write SQL directly.
               </p>
 
-              {/* Example Prompts */}
               {!schemaError && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full">
                   <button
@@ -530,7 +576,6 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
                 </div>
               )}
 
-              {/* No Schema Selected Info */}
               {!schemaError && !selectedSchema && (
                 <div className="mt-4 p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
                   <div className="flex items-start gap-2">
@@ -545,7 +590,6 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
                 </div>
               )}
 
-              {/* Schema Error Banner */}
               {schemaError && (
                 <div className="mt-4 p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
                   <div className="flex items-start gap-2">
@@ -570,21 +614,17 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
             </div>
           </div>
         ) : (
-          // Messages
           <div className="container max-w-4xl mx-auto px-2 py-6">
             <div className="space-y-6 py-4">
-              {/* Show context summary when resuming a chat */}
               {isResumingChat && (
                 <ChatContextSummary chatSessionId={chatSessionId!} className="mb-4" />
               )}
 
-              {/* Messages */}
               {messages.map((msg, index) => {
                 const messageText = getMessageText(msg);
                 const toolCalls = getToolCalls(msg);
                 const sqlQueries = chatConfig.showSQLGeneration ? extractSQLFromToolCalls(toolCalls) : [];
 
-                // Skip rendering if there's no text (only tool calls)
                 if (!messageText && msg.role === 'assistant') {
                   return null;
                 }
@@ -592,14 +632,12 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
                 return (
                   <div key={msg.id || index}>
                     {msg.role === 'user' ? (
-                      // User message
                       <div className="flex justify-end mb-4">
                         <div className="max-w-[80%] bg-primary text-primary-foreground rounded-2xl rounded-tr-sm px-4 py-3 shadow-sm">
                           <CollapsibleMessage content={messageText} />
                         </div>
                       </div>
                     ) : (
-                      // AI Response
                       <div className="flex gap-3 mb-4">
                         <div className="flex-shrink-0">
                           <div className="flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 dark:from-blue-600 dark:to-purple-700 shadow-sm">
@@ -611,7 +649,6 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
                           </div>
                         </div>
                         <div className="flex-1 min-w-0">
-                          {/* Show SQL if enabled */}
                           {sqlQueries.length > 0 && (
                             <div className="mb-2">
                               {sqlQueries.map((sql, sqlIndex) => (
@@ -620,7 +657,6 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
                             </div>
                           )}
 
-                          {/* Final AI Response */}
                           {messageText && (
                             <div className="bg-card rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm border">
                               <MessageMarkdown content={messageText} />
@@ -633,7 +669,6 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
                 );
               })}
 
-              {/* Loading indicator for new message */}
               {isLoading && messages.length > 0 && messages[messages.length - 1].role === 'user' && (
                 <div className="flex gap-3 mb-4">
                   <div className="flex-shrink-0">
@@ -652,7 +687,6 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
                 </div>
               )}
 
-              {/* Error message */}
               {error && (
                 <div className="flex gap-3 mb-4">
                   <div className="flex-shrink-0">
@@ -674,11 +708,9 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
         )}
       </div>
 
-      {/* Chat Input */}
       <div className="flex-shrink-0 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container max-w-4xl mx-auto px-2 py-4">
           <form onSubmit={handleSubmit} className="flex gap-2 items-end">
-            {/* Configuration Popover */}
             <ChatConfigPopover />
 
             <div className="relative flex-1">
@@ -723,13 +755,21 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
               </Button>
             )}
           </form>
-          <p className="text-xs text-muted-foreground mt-2 text-center">
-            Press Enter to send, Shift + Enter for new line
-          </p>
+          <div className="mt-2 text-xs text-muted-foreground text-center">
+            {selectedTables.size > 0 ? (
+              <div className="flex items-center justify-center gap-1">
+                <span className="text-muted-foreground/70">Selected tables:</span>
+                <span className="truncate max-w-md">
+                  {Array.from(selectedTables).join(', ')}
+                </span>
+              </div>
+            ) : (
+              <span className="text-muted-foreground/70">No tables selected</span>
+            )}
+          </div>
         </div>
       </div>
 
-        {/* Retrain Modal */}
         <RetrainSchemaModal
           open={isRetrainModalOpen}
           onOpenChange={setIsRetrainModalOpen}
@@ -741,7 +781,6 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
         />
       </div>
 
-      {/* Tool Calls Sidebar - Always render to show icon bar */}
       <ToolCallsSidebar
         toolCalls={allToolCalls}
         isOpen={isToolSidebarOpen}

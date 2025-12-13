@@ -1,20 +1,12 @@
-/**
- * Chat Store
- * Zustand store for managing chat session state
- * Manages chat sessions, messages, and AI interactions
- */
-
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import { chatSessionsAPI, type ChatSession, type ChatMessage } from '@/lib/api/chatSessions';
 
 interface ChatState {
-  // Chat session state
   currentChatSessionId: string | null;
   currentChatSession: ChatSession | null;
   chatHistory: ChatMessage[];
 
-  // Chat session actions
   createNewChat: (connectionId: string, schema?: string, tables?: string[], chatConfig?: any) => Promise<ChatSession | null>;
   loadChatHistory: (chatSessionId: string) => Promise<void>;
   saveChatMessages: (userMessage: string, assistantMessage: string, toolCalls?: any) => Promise<void>;
@@ -26,14 +18,24 @@ interface ChatState {
 export const useChatStore = create<ChatState>()(
   devtools(
     (set, get) => ({
-      // Initial state
       currentChatSessionId: null,
       currentChatSession: null,
       chatHistory: [],
 
-      // Chat session methods
       createNewChat: async (connectionId, schema, tables, chatConfig) => {
         try {
+          console.log('[useChatStore] Creating new chat session with:', {
+            connectionId,
+            schema,
+            tables,
+            chatConfig
+          });
+
+          if (!connectionId) {
+            console.error('[useChatStore] Connection ID is required but was not provided');
+            return null;
+          }
+
           const response = await chatSessionsAPI.createChatSession({
             connectionId,
             selectedSchema: schema,
@@ -41,17 +43,22 @@ export const useChatStore = create<ChatState>()(
             chatConfig: chatConfig,
           });
 
+          console.log('[useChatStore] Create chat session response:', response);
+
           if (response.success && response.data) {
+            console.log('[useChatStore] Chat session created successfully:', response.data.id);
             set({
               currentChatSessionId: response.data.id,
               currentChatSession: response.data,
               chatHistory: [],
             });
             return response.data;
+          } else {
+            console.error('[useChatStore] Failed to create chat session - response not successful');
+            return null;
           }
-          return null;
         } catch (error) {
-          console.error('Failed to create new chat:', error);
+          console.error('[useChatStore] Exception while creating new chat:', error);
           return null;
         }
       },
@@ -67,7 +74,6 @@ export const useChatStore = create<ChatState>()(
               chatHistory: response.data.chatMessages || [],
             });
           } else {
-            // If loading fails, clear the chat state
             console.error('Failed to load chat history');
             set({
               currentChatSessionId: null,
@@ -77,7 +83,6 @@ export const useChatStore = create<ChatState>()(
           }
         } catch (error) {
           console.error('Failed to load chat history:', error);
-          // Clear chat state on error
           set({
             currentChatSessionId: null,
             currentChatSession: null,
@@ -89,30 +94,41 @@ export const useChatStore = create<ChatState>()(
       saveChatMessages: async (userMessage, assistantMessage, toolCalls) => {
         const { currentChatSessionId } = get();
 
+        console.log('[useChatStore] Attempting to save messages for session:', currentChatSessionId);
+        console.log('[useChatStore] User message length:', userMessage?.length || 0);
+        console.log('[useChatStore] Assistant message length:', assistantMessage?.length || 0);
+
         if (!currentChatSessionId) {
-          console.warn('No active chat session to save messages to');
+          console.error('[useChatStore] No active chat session to save messages to');
+          return;
+        }
+
+        if (!userMessage || !assistantMessage) {
+          console.error('[useChatStore] User message or assistant message is empty', {
+            userMessage: userMessage?.substring(0, 50),
+            assistantMessage: assistantMessage?.substring(0, 50)
+          });
           return;
         }
 
         try {
-          // Save user message
-          await chatSessionsAPI.addMessage(currentChatSessionId, {
+          console.log('[useChatStore] Saving user message...');
+          const userResponse = await chatSessionsAPI.addMessage(currentChatSessionId, {
             role: 'user',
             content: userMessage,
           });
+          console.log('[useChatStore] User message saved:', userResponse);
 
-          // Save assistant message with tool calls
-          await chatSessionsAPI.addMessage(currentChatSessionId, {
+          console.log('[useChatStore] Saving assistant message...');
+          const assistantResponse = await chatSessionsAPI.addMessage(currentChatSessionId, {
             role: 'assistant',
             content: assistantMessage,
             toolCalls: toolCalls,
           });
-
-          // Don't append to chatHistory - for new chats, we show streaming messages
-          // For resumed chats, messages are already in chatHistory from initial load
-          // This prevents duplicate display of messages
+          console.log('[useChatStore] Assistant message saved:', assistantResponse);
         } catch (error) {
-          console.error('Failed to save chat messages:', error);
+          console.error('[useChatStore] Failed to save chat messages:', error);
+          throw error;
         }
       },
 
@@ -142,18 +158,31 @@ export const useChatStore = create<ChatState>()(
       generateChatTitle: async (userMessage) => {
         const { currentChatSessionId } = get();
 
+        console.log('[useChatStore] generateChatTitle called with:', {
+          currentChatSessionId,
+          userMessageLength: userMessage?.length || 0
+        });
+
         if (!currentChatSessionId) {
-          console.warn('[useChatStore] No active chat session to generate title for');
+          console.error('[useChatStore] No active chat session to generate title for');
+          return;
+        }
+
+        if (!userMessage || userMessage.trim().length === 0) {
+          console.error('[useChatStore] User message is empty, cannot generate title');
           return;
         }
 
         try {
           console.log('[useChatStore] Requesting title generation for session:', currentChatSessionId);
+          console.log('[useChatStore] First 100 chars of user message:', userMessage.substring(0, 100));
+
           const response = await chatSessionsAPI.generateTitle(currentChatSessionId);
+
+          console.log('[useChatStore] Title generation response:', response);
 
           if (response.success && response.data) {
             console.log('[useChatStore] Title generated successfully:', response.data.title);
-            // Update the local state with the new title
             const session = get().currentChatSession;
             if (session) {
               set({
@@ -161,10 +190,10 @@ export const useChatStore = create<ChatState>()(
               });
             }
           } else {
-            console.warn('[useChatStore] Title generation failed:', response);
+            console.error('[useChatStore] Title generation failed - response not successful');
           }
         } catch (error) {
-          console.error('[useChatStore] Failed to generate chat title:', error);
+          console.error('[useChatStore] Exception during title generation:', error);
         }
       },
 

@@ -1,13 +1,6 @@
 "use client";
 
-import { Database, AlertCircle, CheckCircle } from "lucide-react";
 import { cn } from "@/utils/ui";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 
 interface ContextIndicatorProps {
   percentageUsed: number;
@@ -19,12 +12,9 @@ interface ContextIndicatorProps {
 
 export function ContextIndicator({
   percentageUsed,
-  totalTokens,
-  maxTokens,
-  messageCount,
   className,
 }: ContextIndicatorProps) {
-  // Determine color and status based on percentage
+  // Determine color based on percentage
   const getStatusColor = () => {
     if (percentageUsed < 50) {
       return "text-green-600 dark:text-green-400";
@@ -35,83 +25,42 @@ export function ContextIndicator({
     }
   };
 
-  const getStatusIcon = () => {
-    if (percentageUsed < 80) {
-      return <CheckCircle className="h-3 w-3" />;
-    } else {
-      return <AlertCircle className="h-3 w-3" />;
-    }
-  };
-
-  const getStatusMessage = () => {
+  const getFillColor = () => {
     if (percentageUsed < 50) {
-      return "Context window has plenty of space";
+      return "bg-green-500 dark:bg-green-400";
     } else if (percentageUsed < 80) {
-      return "Context window is moderately used";
+      return "bg-yellow-500 dark:bg-yellow-400";
     } else {
-      return "Context window is nearing capacity. Old messages may be summarized.";
+      return "bg-red-500 dark:bg-red-400";
     }
   };
 
   return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
+    <div
+      className={cn(
+        "flex items-center gap-2 px-2 py-1 rounded-full",
+        className
+      )}
+    >
+      {/* Circular fill indicator */}
+      <div className="relative w-5 h-5">
+        {/* Background circle */}
+        <div className="absolute inset-0 rounded-full border-2 border-muted" />
+        {/* Fill circle (clipped) */}
+        <div className="absolute inset-0 overflow-hidden rounded-full">
           <div
-            className={cn(
-              "flex items-center gap-2 px-2.5 py-1 rounded-full bg-muted/50 hover:bg-muted transition-colors cursor-help",
-              className
-            )}
-          >
-            <Database className="h-3 w-3 text-muted-foreground" />
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs font-medium text-muted-foreground">
-                Context:
-              </span>
-              <span className={cn("text-xs font-semibold", getStatusColor())}>
-                {percentageUsed}%
-              </span>
-              {getStatusIcon()}
-            </div>
-          </div>
-        </TooltipTrigger>
-        <TooltipContent className="max-w-xs bg-popover text-popover-foreground border-border" side="bottom">
-          <div className="space-y-2">
-            <p className="text-sm font-medium text-foreground">{getStatusMessage()}</p>
-            <div className="space-y-1 text-xs">
-              <div className="flex justify-between gap-4">
-                <span className="text-muted-foreground">Messages:</span>
-                <span className="font-medium text-foreground">{messageCount}</span>
-              </div>
-              <div className="flex justify-between gap-4">
-                <span className="text-muted-foreground">Tokens Used:</span>
-                <span className="font-medium text-foreground">
-                  {totalTokens.toLocaleString()} / {maxTokens.toLocaleString()}
-                </span>
-              </div>
-              <div className="flex justify-between gap-4">
-                <span className="text-muted-foreground">Capacity:</span>
-                <span className="font-medium text-foreground">{percentageUsed}%</span>
-              </div>
-            </div>
-            <div className="pt-2 border-t border-border">
-              <div className="w-full bg-muted/30 rounded-full h-1.5">
-                <div
-                  className={cn(
-                    "h-1.5 rounded-full transition-all",
-                    percentageUsed < 50
-                      ? "bg-green-500 dark:bg-green-400"
-                      : percentageUsed < 80
-                      ? "bg-yellow-500 dark:bg-yellow-400"
-                      : "bg-red-500 dark:bg-red-400"
-                  )}
-                  style={{ width: `${Math.min(percentageUsed, 100)}%` }}
-                />
-              </div>
-            </div>
-          </div>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+            className={cn("w-full transition-all", getFillColor())}
+            style={{
+              height: `${Math.min(percentageUsed, 100)}%`,
+              marginTop: `${100 - Math.min(percentageUsed, 100)}%`
+            }}
+          />
+        </div>
+      </div>
+      {/* Percentage text */}
+      <span className={cn("text-xs font-semibold", getStatusColor())}>
+        {percentageUsed}%
+      </span>
+    </div>
   );
 }

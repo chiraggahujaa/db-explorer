@@ -71,6 +71,11 @@ export class ChatMessageService extends BaseService {
         throw new Error(`Database error: ${error.message}`);
       }
 
+      await supabaseAdmin
+        .from('chat_sessions')
+        .update({ last_message_at: new Date().toISOString() })
+        .eq('id', messageData.chatSessionId);
+
       return {
         success: true,
         data: DataMapper.toCamelCase(result) as ChatMessage,
@@ -222,7 +227,6 @@ export class ChatMessageService extends BaseService {
         throw new Error(`Database error: ${error.message}`);
       }
 
-      // Reverse to get chronological order
       const messages = (data || []).reverse();
 
       return {
@@ -295,6 +299,14 @@ export class ChatMessageService extends BaseService {
 
       if (error) {
         throw new Error(`Database error: ${error.message}`);
+      }
+
+      const chatSessionIds = [...new Set(messages.map(msg => msg.chatSessionId))];
+      for (const chatSessionId of chatSessionIds) {
+        await supabaseAdmin
+          .from('chat_sessions')
+          .update({ last_message_at: new Date().toISOString() })
+          .eq('id', chatSessionId);
       }
 
       return {

@@ -22,6 +22,7 @@ interface ConnectionExplorerContextType {
   config: QueryConfig;
   chatConfig: ChatConfig;
   setSelectedSchema: (schema: string | undefined) => void;
+  setSelectedTables: (tables: string[]) => void;
   toggleTable: (tableName: string) => void;
   clearSelectedTables: () => void;
   updateConfig: (updates: Partial<QueryConfig>) => void;
@@ -63,6 +64,10 @@ export function ConnectionExplorerProvider({ children }: ConnectionExplorerProvi
     setSelectedTables(new Set());
   }, []);
 
+  const setSelectedTablesCallback = useCallback((tables: string[]) => {
+    setSelectedTables(new Set(tables));
+  }, []);
+
   const toggleTable = useCallback((tableName: string) => {
     setSelectedTables((prev) => {
       const newSet = new Set(prev);
@@ -100,6 +105,7 @@ export function ConnectionExplorerProvider({ children }: ConnectionExplorerProvi
     config,
     chatConfig,
     setSelectedSchema,
+    setSelectedTables: setSelectedTablesCallback,
     toggleTable,
     clearSelectedTables,
     updateConfig,

@@ -19,6 +19,12 @@ import { LoadingSpinner } from "@/components/common/LoadingSpinner";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect, type SearchableSelectOption } from "@/components/ui/searchable-select";
 import { SearchInput } from "@/components/ui/search-input";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/utils/ui";
 import { toast } from "sonner";
 import { useConnectionExplorer } from "@/contexts/ConnectionExplorerContext";
@@ -55,8 +61,6 @@ export function ExplorerSidebar({
     toggleTable,
   } = useConnectionExplorer();
 
-  // Get the current chat session ID from the store
-  // We'll use this to exclude newly created sessions from the history when in "new chat" view
   const currentChatSessionIdFromStore = useChatStore((state) => state.currentChatSessionId);
 
   const [activeView, setActiveView] = useState<SidebarView>("database");
@@ -64,12 +68,10 @@ export function ExplorerSidebar({
   const [loadedTables, setLoadedTables] = useState<Table[]>([]);
   const [isLoadingTables, setIsLoadingTables] = useState(false);
 
-  // Resize functionality
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
 
-  // Fetch schemas for the connection
   const { data: schemasData, isLoading: isLoadingSchemas, refetch: refetchSchemas } = useQuery({
     queryKey: ["schemas", initialConnectionId],
     queryFn: async () => {
@@ -85,16 +87,12 @@ export function ExplorerSidebar({
     enabled: !!initialConnectionId,
   });
 
-  // Reset schema selection when connection changes
   useEffect(() => {
-    // Try to load the last selected schema from localStorage
     if (initialConnectionId) {
       try {
         const storageKey = `selected_schema_${initialConnectionId}`;
         const savedSchema = localStorage.getItem(storageKey);
         if (savedSchema) {
-          // We'll set this after schemas are loaded
-          // Just store it in a ref for now
         } else {
           setSelectedSchema(undefined);
         }
@@ -108,20 +106,16 @@ export function ExplorerSidebar({
     setLoadedTables([]);
   }, [initialConnectionId, setSelectedSchema]);
 
-  // Auto-select schema: first try localStorage, then single schema, or keep current selection
   useEffect(() => {
     if (!schemasData || !initialConnectionId) return;
 
-    // If a schema is already selected, keep it
     if (selectedSchema) return;
 
     try {
-      // Try to restore from localStorage
       const storageKey = `selected_schema_${initialConnectionId}`;
       const savedSchema = localStorage.getItem(storageKey);
 
       if (savedSchema && schemasData.some(s => s.name === savedSchema)) {
-        // Restore the saved schema if it still exists
         setSelectedSchema(savedSchema);
         return;
       }
@@ -129,13 +123,11 @@ export function ExplorerSidebar({
       console.error('Failed to load schema from localStorage:', error);
     }
 
-    // Fallback: auto-select if only one schema exists
     if (schemasData.length === 1) {
       setSelectedSchema(schemasData[0].name);
     }
   }, [schemasData, selectedSchema, setSelectedSchema, initialConnectionId]);
 
-  // Load tables when schema is selected
   useEffect(() => {
     if (selectedSchema && initialConnectionId) {
       loadTables(initialConnectionId, selectedSchema);
@@ -164,7 +156,6 @@ export function ExplorerSidebar({
   const handleRefreshSchemas = async () => {
     await refetchSchemas();
 
-    // Also refresh tables if a schema is selected
     if (selectedSchema && initialConnectionId) {
       await loadTables(initialConnectionId, selectedSchema);
       toast.success("Schemas and tables refreshed");
@@ -173,7 +164,6 @@ export function ExplorerSidebar({
     }
   };
 
-  // Resize handlers
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     setIsResizing(true);
@@ -209,11 +199,9 @@ export function ExplorerSidebar({
   }, [isResizing]);
 
   const handleSchemaChange = useCallback((schemaName: string) => {
-    // Use setTimeout to ensure Select portal closes before state updates
     setTimeout(() => {
       setSelectedSchema(schemaName);
 
-      // Save to localStorage
       if (initialConnectionId) {
         try {
           const storageKey = `selected_schema_${initialConnectionId}`;
@@ -245,17 +233,29 @@ export function ExplorerSidebar({
     );
   }, [loadedTables, tableFilter]);
 
-  const handleDatabaseClick = () => {
-    setActiveView("database");
-    if (onToggle) onToggle(); // Toggle sidebar when clicking database icon
-  };
+  /**
+   * Generic handler for sidebar view switching
+   * Behavior:
+   * - If sidebar is closed: Open sidebar and switch to the view
+   * - If sidebar is open and view is different: Just switch to the new view (keep sidebar open)
+   * - If sidebar is open and clicking the active view: Close the sidebar
+   *
+   * This pattern makes it easy to add more sidebar views/icons in the future
+   */
+  const handleViewClick = useCallback((view: SidebarView) => {
+    if (isOpen && activeView === view) {
+      // If sidebar is open and already on this view, close it
+      if (onToggle) onToggle();
+    } else {
+      // Otherwise, switch to this view and ensure sidebar is open
+      setActiveView(view);
+      if (!isOpen && onToggle) onToggle();
+    }
+  }, [isOpen, activeView, onToggle]);
 
-  const handleRecentsClick = () => {
-    setActiveView("recents");
-    if (onToggle) onToggle(); // Toggle sidebar when clicking recents icon
-  };
+  const handleDatabaseClick = () => handleViewClick("database");
+  const handleRecentsClick = () => handleViewClick("recents");
 
-  // When collapsed, show the icon bar with both icons
   if (!isOpen) {
     return (
       <div className="flex flex-col items-center gap-2 p-2 border-r bg-muted/30">
@@ -289,7 +289,6 @@ export function ExplorerSidebar({
       className="flex h-full bg-background border-r relative"
       style={{ width: `${sidebarWidth}px` }}
     >
-      {/* Left Icon Bar - Tabs */}
       <div className="flex flex-col items-center gap-2 p-2 border-r bg-muted/30">
         <button
           onClick={handleDatabaseClick}
@@ -316,10 +315,8 @@ export function ExplorerSidebar({
         <div className="flex-1" />
       </div>
 
-      {/* Main Sidebar Content - Database Tab */}
       {activeView === "database" && (
         <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Top Section: Schema Selector */}
           <div className="p-3 border-b space-y-2">
             <div className="flex items-center gap-2">
               <SearchableSelect
@@ -335,40 +332,56 @@ export function ExplorerSidebar({
                 triggerClassName="flex-1"
               />
               <div className="flex items-center gap-1 shrink-0">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-9 w-9"
-                  onClick={handleRefreshSchemas}
-                  disabled={isLoadingSchemas || !initialConnectionId}
-                  title="Refresh schemas"
-                >
-                  <RefreshCw
-                    className={cn(
-                      "w-4 h-4",
-                      isLoadingSchemas && "animate-spin"
-                    )}
-                  />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-9 w-9"
-                  onClick={() => {
-                    if (onNewChat) {
-                      onNewChat();
-                      toast.success("New chat session started");
-                    }
-                  }}
-                  disabled={!onNewChat || !initialConnectionId}
-                  title="Start new chat"
-                >
-                  <Plus className="w-4 h-4" />
-                </Button>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-9 w-9"
+                        onClick={handleRefreshSchemas}
+                        disabled={isLoadingSchemas || !initialConnectionId}
+                      >
+                        <RefreshCw
+                          className={cn(
+                            "w-4 h-4",
+                            isLoadingSchemas && "animate-spin"
+                          )}
+                        />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Refresh Schemas</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-9 w-9"
+                        onClick={() => {
+                          if (onNewChat) {
+                            onNewChat();
+                            toast.success("New chat session started");
+                          }
+                        }}
+                        disabled={!onNewChat || !initialConnectionId}
+                      >
+                        <Plus className="w-4 h-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>New Chat</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               </div>
             </div>
 
-            {/* Filter Input */}
               <SearchInput
               placeholder="Filter"
               value={tableFilter}
@@ -380,7 +393,6 @@ export function ExplorerSidebar({
             />
           </div>
 
-          {/* Tables List */}
           <div className="flex-1 overflow-y-auto">
             {!initialConnectionId ? (
               <div className="p-4 text-center text-sm text-muted-foreground">
@@ -445,7 +457,6 @@ export function ExplorerSidebar({
         </div>
       )}
 
-      {/* Main Sidebar Content - Recents Tab */}
       {activeView === "recents" && (
         <div className="flex-1 flex flex-col overflow-hidden" style={{ width: `${sidebarWidth}px` }}>
           <div className="p-4 border-b flex items-center justify-between">
@@ -475,7 +486,6 @@ export function ExplorerSidebar({
                 onSelectChat={onSelectChat}
                 currentChatSessionId={currentChatSessionId}
                 excludeSessionId={
-                  // If we're in "new chat" view (no chatId in URL), exclude the session created in the store
                   currentChatSessionId === undefined ? currentChatSessionIdFromStore : null
                 }
               />
@@ -491,7 +501,6 @@ export function ExplorerSidebar({
         </div>
       )}
 
-      {/* Resize Handle - Works for all tabs */}
       <div
         onMouseDown={handleMouseDown}
         className={cn(
