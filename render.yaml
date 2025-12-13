@@ -1,0 +1,39 @@
+services:
+  # Backend API Service
+  - type: web
+    name: db-explorer-api
+    runtime: node
+    region: oregon
+    plan: free
+    branch: main
+    rootDir: db-explorer-api
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: API_BASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      - key: FRONTEND_URL
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: MAINTENANCE_MODE
+        value: false
+      - key: GEMINI_API_KEY
+        sync: false
+    healthCheckPath: /health
