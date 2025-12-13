@@ -95,6 +95,9 @@ export class JobService {
         schema: process.env.PGBOSS_SCHEMA || 'pgboss',
         maintenanceIntervalSeconds: 300,
         monitorIntervalSeconds: 10,
+        ssl: {
+          rejectUnauthorized: false, // Required for Supabase pooler in production
+        },
       });
 
       this.boss.on('error', (error: any) => {
@@ -137,10 +140,10 @@ export class JobService {
       throw new Error('Database password not found. Set DB_PASSWORD environment variable');
     }
 
-    // Use Supabase connection pooler with session mode (port 5432) for pg-boss
+    // Use Supabase connection pooler with transaction mode (port 6543) for pg-boss
     // This provides better compatibility with IPv4-only environments like Render
-    // Format: postgresql://postgres.{project_ref}:{password}@aws-0-{region}.pooler.supabase.com:5432/postgres
-    return `postgresql://postgres.${projectRef}:${dbPassword}@aws-0-us-east-1.pooler.supabase.com:5432/postgres?sslmode=require`;
+    // No SSL mode specified to allow node-postgres to handle SSL automatically
+    return `postgresql://postgres.${projectRef}:${dbPassword}@aws-0-us-east-1.pooler.supabase.com:6543/postgres`;
   }
 
   /**
