@@ -27,19 +27,18 @@ import {
 } from '../types/job.js';
 import { PaginatedResponse } from '../types/common.js';
 
-// Job retry configurations for different job types
 const JOB_RETRY_CONFIG: Record<JobType, Partial<JobOptions>> = {
   'schema-rebuild': {
     retryLimit: 3,
-    retryDelay: 60,        // 1 minute
-    retryBackoff: true,    // Exponential backoff: 1min, 2min, 4min
-    expireInSeconds: 86340, // 23 hours 59 minutes (pg-boss max is < 24 hours)
+    retryDelay: 60,
+    retryBackoff: true,
+    expireInSeconds: 86340,
   },
   'data-export': {
     retryLimit: 2,
     retryDelay: 30,
     retryBackoff: true,
-    expireInSeconds: 43200, // 12 hours
+    expireInSeconds: 43200,
   },
   'bulk-import': {
     retryLimit: 2,
@@ -51,13 +50,13 @@ const JOB_RETRY_CONFIG: Record<JobType, Partial<JobOptions>> = {
     retryLimit: 1,
     retryDelay: 60,
     retryBackoff: false,
-    expireInSeconds: 21600, // 6 hours
+    expireInSeconds: 21600,
   },
   'backup-connection': {
     retryLimit: 3,
     retryDelay: 120,
     retryBackoff: true,
-    expireInSeconds: 86340, // 23 hours 59 minutes (pg-boss max is < 24 hours)
+    expireInSeconds: 86340,
   },
 };
 
@@ -89,18 +88,15 @@ export class JobService {
     }
 
     try {
-      // Build connection string from environment if not provided
       const connString = connectionString || this.buildConnectionString();
 
-      // Initialize pg-boss
       this.boss = new PgBoss({
         connectionString: connString,
         schema: process.env.PGBOSS_SCHEMA || 'pgboss',
-        maintenanceIntervalSeconds: 300, // Run maintenance every 5 minutes
-        monitorIntervalSeconds: 10, // Monitor queue states every 10 seconds
+        maintenanceIntervalSeconds: 300,
+        monitorIntervalSeconds: 10,
       });
 
-      // Set up error handlers
       this.boss.on('error', (error: any) => {
         console.error('pg-boss error:', error);
       });
@@ -111,7 +107,6 @@ export class JobService {
       //   console.log('Job queue states:', states);
       // });
 
-      // Start pg-boss
       await this.boss.start();
       this.isInitialized = true;
 
@@ -127,26 +122,25 @@ export class JobService {
    */
   private buildConnectionString(): string {
     const supabaseUrl = process.env.SUPABASE_URL;
-    const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!supabaseUrl) {
       throw new Error('SUPABASE_URL environment variable is not set');
     }
 
-    // Extract project reference from Supabase URL
     const projectRef = supabaseUrl.match(/https:\/\/([^.]+)\.supabase\.co/)?.[1];
     if (!projectRef) {
       throw new Error('Invalid SUPABASE_URL format');
     }
 
-    // Build PostgreSQL connection string
-    // Format: postgresql://postgres:[PASSWORD]@db.[PROJECT_REF].supabase.co:5432/postgres
-    const dbPassword = process.env.DB_PASSWORD || process.env.DB_PASSWORD;
+    const dbPassword = process.env.DB_PASSWORD;
     if (!dbPassword) {
-      throw new Error('Database password not found. Set DB_PASSWORD or DB_PASSWORD');
+      throw new Error('Database password not found. Set DB_PASSWORD environment variable');
     }
 
-    return `postgresql://postgres:${dbPassword}@db.${projectRef}.supabase.co:5432/postgres`;
+    // Use Supabase connection pooler with session mode (port 5432) for pg-boss
+    // This provides better compatibility with IPv4-only environments like Render
+    // Format: postgresql://postgres.{project_ref}:{password}@aws-0-{region}.pooler.supabase.com:5432/postgres
+    return `postgresql://postgres.${projectRef}:${dbPassword}@aws-0-us-east-1.pooler.supabase.com:5432/postgres?sslmode=require`;
   }
 
   /**
@@ -154,7 +148,7 @@ export class JobService {
    */
   async stop(): Promise<void> {
     if (this.boss && this.isInitialized) {
-      await this.boss.stop({ graceful: true, timeout: 30000 }); // 30 second timeout
+      await this.boss.stop({ graceful: true, timeout: 30000 });
       this.isInitialized = false;
       console.log('JobService stopped');
     }
@@ -171,11 +165,9 @@ export class JobService {
     this.ensureInitialized();
 
     try {
-      // Merge default retry config with provided options
       const defaultConfig = JOB_RETRY_CONFIG[type] || {};
       const jobOptions = { ...defaultConfig, ...options };
 
-      // Convert to pg-boss options format
       const pgBossOptions: SendOptions = {};
       if (jobOptions.priority !== undefined) pgBossOptions.priority = jobOptions.priority;
       if (jobOptions.retryLimit !== undefined) pgBossOptions.retryLimit = jobOptions.retryLimit;
@@ -185,7 +177,6 @@ export class JobService {
       if (jobOptions.singletonKey !== undefined) pgBossOptions.singletonKey = jobOptions.singletonKey;
       if (jobOptions.startAfter !== undefined) pgBossOptions.startAfter = jobOptions.startAfter as any;
 
-      // Send job to queue
       const jobId = await this.boss!.send(type, payload, pgBossOptions);
 
       if (!jobId) {
@@ -194,7 +185,6 @@ export class JobService {
 
       console.log(`Job created: ${jobId} (type: ${type})`);
 
-      // Emit job created event
       this.emitEvent('job:created', {
         jobId,
         type,
@@ -219,7 +209,6 @@ export class JobService {
     this.ensureInitialized();
 
     try {
-      // Try all known job types
       for (const jobType of ['schema-rebuild', 'data-export', 'bulk-import', 'analytics-report', 'backup-connection'] as JobType[]) {
         try {
           const job = await this.boss!.getJobById(jobType, jobId);
@@ -227,7 +216,6 @@ export class JobService {
             return this.mapJob(job);
           }
         } catch (error) {
-          // Continue to next job type
           continue;
         }
       }
@@ -247,12 +235,9 @@ export class JobService {
     try {
       const { page = 1, limit = 20, status, type } = filters;
 
-      // pg-boss doesn't support user filtering directly, so we need to fetch and filter
-      // This is not ideal for large datasets - consider adding user_id to job name or using metadata
       const states = status ? (Array.isArray(status) ? status : [status]) : undefined;
       const jobTypes = type ? (Array.isArray(type) ? type : [type]) : undefined;
 
-      // Fetch jobs from pg-boss
       let allJobs: any[] = [];
 
       if (states) {
@@ -261,26 +246,21 @@ export class JobService {
           allJobs.push(...jobs);
         }
       } else {
-        // Fetch all jobs for the user (this is inefficient, but pg-boss limitation)
         const jobs = await this.boss!.fetch('*', { batchSize: 100, includeMetadata: true });
         allJobs = jobs;
       }
 
-      // Filter by userId (from job data)
       const userJobs = allJobs.filter((job) => job.data?.userId === userId);
 
-      // Filter by type if specified
       const filteredJobs = jobTypes
         ? userJobs.filter((job) => jobTypes.includes(job.name as JobType))
         : userJobs;
 
-      // Apply pagination
       const total = filteredJobs.length;
       const startIndex = (page - 1) * limit;
       const endIndex = startIndex + limit;
       const paginatedJobs = filteredJobs.slice(startIndex, endIndex);
 
-      // Map to JobWithMetadata
       const mappedJobs = paginatedJobs.map((job) => this.mapJob(job));
 
       return {
@@ -308,7 +288,6 @@ export class JobService {
     this.ensureInitialized();
 
     try {
-      // Get job details first to get the queue name
       const job = await this.getJob(jobId);
       if (!job) {
         throw new Error('Job not found');
@@ -346,7 +325,6 @@ export class JobService {
         throw new Error('Only failed jobs can be retried');
       }
 
-      // Create a new job with the same data
       const newJobId = await this.createJob(job.name as JobType, job.data);
       console.log(`Job retried: ${jobId} -> ${newJobId}`);
 
@@ -383,7 +361,6 @@ export class JobService {
     this.ensureInitialized();
 
     try {
-      // Create queue first (required in pg-boss v10+)
       await this.createQueue(jobName);
 
       const workerOptions: WorkOptions = {
@@ -393,15 +370,12 @@ export class JobService {
       };
 
       await this.boss!.work(jobName, workerOptions, async (jobs: any[]) => {
-        // pg-boss with includeMetadata: true passes an array of jobs
-        // We process them one at a time
         const results = [];
 
         for (const job of jobs) {
           console.log(`Processing job: ${job.id} (type: ${jobName})`);
 
           try {
-            // Emit job started event
             this.emitEvent('job:started', {
               jobId: job.id,
               type: jobName,
@@ -410,10 +384,8 @@ export class JobService {
               timestamp: new Date(),
             });
 
-            // Execute handler
             const result = await handler(job);
 
-            // Emit job completed event
             this.emitEvent('job:completed', {
               jobId: job.id,
               type: jobName,
@@ -427,7 +399,6 @@ export class JobService {
           } catch (error: any) {
             console.error(`Job ${job.id} failed:`, error);
 
-            // Emit job failed event
             this.emitEvent('job:failed', {
               jobId: job.id,
               type: jobName,
@@ -458,8 +429,6 @@ export class JobService {
     this.ensureInitialized();
 
     try {
-      // pg-boss doesn't have built-in progress tracking
-      // We'll emit an event that can be captured by WebSocket service
       const job = await this.getJob(jobId);
       if (job) {
         this.emitEvent('job:progress', {
@@ -485,8 +454,6 @@ export class JobService {
     this.ensureInitialized();
 
     try {
-      // pg-boss doesn't provide built-in stats, so we'll query manually
-      // This is a simplified version - for production, use pg-boss maintenance queries
       return {
         total: 0,
         created: 0,
@@ -567,12 +534,9 @@ export class JobService {
     const startTime = Date.now();
 
     while (Date.now() - startTime < timeoutMs) {
-      // In production, check active job count
-      // For now, just wait a bit
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
   }
 }
 
-// Export singleton instance
 export const jobService = JobService.getInstance();
