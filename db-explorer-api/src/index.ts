@@ -117,15 +117,20 @@ async function initializeServices() {
   try {
     console.log('🔧 Initializing services...');
 
-    // Initialize Job Service (pg-boss)
+    // Initialize Job Service (pg-boss) - optional, gracefully handle failures
     console.log('📦 Initializing job queue...');
-    await jobService.initialize();
-    console.log('✅ Job queue initialized');
+    try {
+      await jobService.initialize();
+      console.log('✅ Job queue initialized');
 
-    // Register job workers
-    console.log('👷 Registering job workers...');
-    await registerAllWorkers();
-    console.log('✅ Job workers registered');
+      // Register job workers (only if job service initialized successfully)
+      console.log('👷 Registering job workers...');
+      await registerAllWorkers();
+      console.log('✅ Job workers registered');
+    } catch (jobError) {
+      console.warn('⚠️  Job queue initialization failed (non-critical):', jobError instanceof Error ? jobError.message : jobError);
+      console.warn('⚠️  Background jobs will not be available, but API will continue to work');
+    }
 
     // Initialize WebSocket Service
     console.log('🔌 Initializing WebSocket service...');

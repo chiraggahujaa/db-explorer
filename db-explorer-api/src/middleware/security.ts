@@ -180,23 +180,31 @@ const parseAllowedOrigins = (): string[] => {
 export const corsOptions = {
   origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
     const allowedOrigins = parseAllowedOrigins();
-    
+
     console.log('CORS: Allowed origins:', allowedOrigins);
-    
-    // Allow requests with no origin (mobile apps, etc.)
-    if (!origin) return callback(null, true);
-    
+    console.log('CORS: Request origin:', origin);
+
+    // Allow requests with no origin (mobile apps, curl, etc.)
+    if (!origin) {
+      console.log('CORS: Allowing request with no origin');
+      return callback(null, true);
+    }
+
     if (allowedOrigins.includes(origin)) {
+      console.log('CORS: Allowing origin:', origin);
       callback(null, true);
     } else {
       console.warn(`CORS: Blocked origin: ${origin}`);
+      console.warn(`CORS: Allowed origins are:`, allowedOrigins);
       callback(new Error('Not allowed by CORS'));
     }
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
   exposedHeaders: ['X-Total-Count', 'X-Page-Count'],
+  optionsSuccessStatus: 204,
+  preflightContinue: false,
 };
 
 // Request validation middleware

@@ -9,7 +9,7 @@
     "dev:prod": "NODE_ENV=production nodemon",
     "dev:staging": "NODE_ENV=staging nodemon",
     "build": "tsc",
-    "start": "NODE_ENV=production NODE_OPTIONS='--dns-result-order=ipv4first' node dist/index.js",
+    "start": "NODE_ENV=production node dist/index.js",
     "lint": "echo 'No linter configured - skipping'",
     "typecheck": "tsc --noEmit",
     "postinstall": "test -d .git && lefthook install || echo 'Skipping lefthook install - not a git repository'",
