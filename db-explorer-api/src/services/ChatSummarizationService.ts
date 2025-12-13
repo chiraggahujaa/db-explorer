@@ -135,7 +135,7 @@ Summary:`;
         return this.generateSimpleSummary(messages);
       }
 
-      const result = await response.json();
+      const result = await response.json() as any;
       const summary = result.candidates?.[0]?.content?.parts?.[0]?.text;
 
       if (!summary) {

@@ -167,12 +167,12 @@ export class ConnectionController {
 
       // Trigger schema training asynchronously (don't wait for it to complete)
       if (result.success && result.data?.id) {
-        this.schemaTrainingService.trainSchema(result.data.id, userId, false)
+        this.schemaTrainingService.trainSchema(result.data!.id, userId, false)
           .then(() => {
-            console.log(`Schema training completed for connection ${result.data.id}`);
+            console.log(`Schema training completed for connection ${result.data!.id}`);
           })
           .catch((error) => {
-            console.error(`Schema training failed for connection ${result.data.id}:`, error);
+            console.error(`Schema training failed for connection ${result.data!.id}:`, error);
           });
       }
 

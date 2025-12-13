@@ -1,6 +1,6 @@
 // Schema Training Scheduler - Handles automatic weekly re-training of database schemas
 
-import cron from 'node-cron';
+import * as cron from 'node-cron';
 import { SchemaTrainingService } from './SchemaTrainingService.js';
 
 export class SchemaTrainingScheduler {

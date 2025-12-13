@@ -329,8 +329,8 @@ export class NotificationService extends BaseService {
 
       // Count by type
       data?.forEach((notification: any) => {
-        const type = notification.type as any;
-        stats.byType[type] = (stats.byType[type] || 0) + 1;
+        const type = notification.type;
+        (stats.byType as any)[type] = ((stats.byType as any)[type] || 0) + 1;
       });
 
       return stats;
