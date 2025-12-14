@@ -65,14 +65,14 @@ export class ConnectionService extends BaseService {
         }
         return {
           ...connection,
-          userRole: member.role,
+          user_role: member.role,
         };
       });
 
       // Separate owned and shared connections
-      const owned = connectionsWithRole.filter((conn) => conn.userRole === 'owner');
+      const owned = connectionsWithRole.filter((conn) => conn.user_role === 'owner');
       const shared = includeShared
-        ? connectionsWithRole.filter((conn) => conn.userRole !== 'owner')
+        ? connectionsWithRole.filter((conn) => conn.user_role !== 'owner')
         : [];
 
       return {

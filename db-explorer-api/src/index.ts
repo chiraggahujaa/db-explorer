@@ -148,26 +148,46 @@ async function initializeServices() {
   }
 }
 
-// Start server
-server.listen(PORT, async () => {
-  const env = process.env.NODE_ENV || 'development';
+// Check if running in serverless environment (Vercel)
+const isServerless = process.env.VERCEL === '1' || process.env.AWS_LAMBDA_FUNCTION_NAME;
 
-  let baseUrl;
-  if (env === 'production') {
-    baseUrl = process.env.RAILWAY_PUBLIC_DOMAIN;
-  } else {
-    baseUrl = `http://localhost:${PORT}`;
+// Start server only if not in serverless environment
+if (!isServerless) {
+  server.listen(PORT, async () => {
+    const env = process.env.NODE_ENV || 'development';
+
+    let baseUrl;
+    if (env === 'production') {
+      baseUrl = process.env.VERCEL_URL 
+        ? `https://${process.env.VERCEL_URL}` 
+        : process.env.VERCEL_PROJECT_PRODUCTION_URL
+        ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+        : process.env.RAILWAY_PUBLIC_DOMAIN || `http://localhost:${PORT}`;
+    } else {
+      baseUrl = `http://localhost:${PORT}`;
+    }
+
+    console.log(`🚀 DB Explorer API Server is running on port ${PORT}`);
+    console.log(`📊 Environment: ${env}`);
+    console.log(`🌐 Health check: ${baseUrl}/health`);
+    console.log(`📖 API Base URL: ${baseUrl}/api`);
+    console.log(`🔌 WebSocket URL: ${baseUrl}`);
+
+    // Initialize services after server starts
+    await initializeServices();
+  });
+} else {
+  // In serverless mode, initialize services without starting HTTP server
+  // Note: WebSocket and some long-running services may not work in serverless
+  console.log('🔧 Running in serverless mode (Vercel)');
+  try {
+    await jobService.initialize();
+    await registerAllWorkers();
+    console.log('✅ Services initialized for serverless mode');
+  } catch (error) {
+    console.error('⚠️ Some services may not be available in serverless mode:', error);
   }
-
-  console.log(`🚀 DB Explorer API Server is running on port ${PORT}`);
-  console.log(`📊 Environment: ${env}`);
-  console.log(`🌐 Health check: ${baseUrl}/health`);
-  console.log(`📖 API Base URL: ${baseUrl}/api`);
-  console.log(`🔌 WebSocket URL: ${baseUrl}`);
-
-  // Initialize services after server starts
-  await initializeServices();
-});
+}
 
 // Graceful shutdown
 async function shutdown(signal: string) {

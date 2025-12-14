@@ -72,7 +72,7 @@ export class ChatSessionController {
       const { id } = req.params;
       uuidSchema.parse(id);
 
-      const result = await this.chatSessionService.findByIdWithMessages(id, userId);
+      const result = await this.chatSessionService.findByIdWithMessages(id as string, userId as string);
 
       if (!result.success) {
         return res.status(404).json(result);
@@ -113,10 +113,24 @@ export class ChatSessionController {
 
       const validatedData = createChatSessionSchema.parse(req.body);
 
-      const result = await this.chatSessionService.createSession({
+      // Filter out undefined values to satisfy exactOptionalPropertyTypes
+      const sessionData: {
+        userId: string;
+        connectionId: string;
+        title?: string;
+        selectedSchema?: string;
+        selectedTables?: string[];
+        aiProvider?: 'gemini' | 'openai' | 'anthropic';
+      } = {
         userId,
-        ...validatedData,
-      });
+        connectionId: validatedData.connectionId,
+        ...(validatedData.title !== undefined && { title: validatedData.title }),
+        ...(validatedData.selectedSchema !== undefined && { selectedSchema: validatedData.selectedSchema }),
+        ...(validatedData.selectedTables !== undefined && { selectedTables: validatedData.selectedTables }),
+        ...(validatedData.aiProvider !== undefined && { aiProvider: validatedData.aiProvider }),
+      };
+
+      const result = await this.chatSessionService.createSession(sessionData);
 
       if (!result.success) {
         return res.status(400).json(result);
@@ -160,7 +174,22 @@ export class ChatSessionController {
 
       const validatedData = updateChatSessionSchema.parse(req.body);
 
-      const result = await this.chatSessionService.updateSession(id, userId, validatedData);
+      // Filter out undefined values to satisfy exactOptionalPropertyTypes
+      const updateData: {
+        title?: string;
+        selectedSchema?: string;
+        selectedTables?: string[];
+        connectionId?: string;
+        aiProvider?: string;
+      } = {
+        ...(validatedData.title !== undefined && { title: validatedData.title }),
+        ...(validatedData.selectedSchema !== undefined && { selectedSchema: validatedData.selectedSchema }),
+        ...(validatedData.selectedTables !== undefined && { selectedTables: validatedData.selectedTables }),
+        ...(validatedData.connectionId !== undefined && { connectionId: validatedData.connectionId }),
+        ...(validatedData.aiProvider !== undefined && { aiProvider: validatedData.aiProvider }),
+      };
+
+      const result = await this.chatSessionService.updateSession(id as string, userId as string, updateData);
 
       if (!result.success) {
         return res.status(404).json(result);
@@ -202,7 +231,7 @@ export class ChatSessionController {
       const { id } = req.params;
       uuidSchema.parse(id);
 
-      const result = await this.chatSessionService.deleteSession(id, userId);
+      const result = await this.chatSessionService.deleteSession(id as string, userId as string);
 
       if (!result.success) {
         return res.status(404).json(result);
@@ -245,7 +274,7 @@ export class ChatSessionController {
       uuidSchema.parse(id);
 
       // Verify the chat session belongs to the user
-      const sessionCheck = await this.chatSessionService.findByIdWithMessages(id, userId);
+      const sessionCheck = await this.chatSessionService.findByIdWithMessages(id as string, userId as string);
       if (!sessionCheck.success) {
         return res.status(404).json({
           success: false,
@@ -256,8 +285,12 @@ export class ChatSessionController {
       const validatedData = addMessageSchema.parse(req.body);
 
       const result = await this.chatMessageService.addMessage({
-        chatSessionId: id,
-        ...validatedData,
+        chatSessionId: id as string,
+        role: validatedData.role,
+        content: validatedData.content,
+        ...(validatedData.toolCalls !== undefined && { toolCalls: validatedData.toolCalls }),
+        ...(validatedData.status !== undefined && { status: validatedData.status }),
+        ...(validatedData.errorMessage !== undefined && { errorMessage: validatedData.errorMessage }),
       });
 
       if (!result.success) {
@@ -301,7 +334,7 @@ export class ChatSessionController {
       uuidSchema.parse(id);
 
       // Verify the chat session belongs to the user
-      const sessionCheck = await this.chatSessionService.findByIdWithMessages(id, userId);
+      const sessionCheck = await this.chatSessionService.findByIdWithMessages(id as string, userId as string);
       if (!sessionCheck.success) {
         return res.status(404).json({
           success: false,
@@ -309,7 +342,7 @@ export class ChatSessionController {
         });
       }
 
-      const result = await this.contextSummaryService.generateContextSummary(id);
+      const result = await this.contextSummaryService.generateContextSummary(id as string);
 
       res.status(200).json(result);
     } catch (error: any) {
@@ -350,7 +383,7 @@ export class ChatSessionController {
       console.log('[ChatSessionController] Generating title for chat session:', id);
 
       // Verify the chat session belongs to the user
-      const sessionCheck = await this.chatSessionService.findByIdWithMessages(id, userId);
+      const sessionCheck = await this.chatSessionService.findByIdWithMessages(id as string, userId as string);
       if (!sessionCheck.success) {
         console.error('[ChatSessionController] Chat session not found:', id);
         return res.status(404).json({
@@ -360,7 +393,7 @@ export class ChatSessionController {
       }
 
       // Get the first user message
-      const firstMessageResult = await this.chatMessageService.getFirstUserMessage(id);
+      const firstMessageResult = await this.chatMessageService.getFirstUserMessage(id as string);
       if (!firstMessageResult.success || !firstMessageResult.data) {
         console.warn('[ChatSessionController] No user messages found for session:', id);
         return res.status(400).json({
@@ -384,8 +417,8 @@ export class ChatSessionController {
       console.log('[ChatSessionController] Generated title:', titleResult.data);
 
       // Update the chat session with the generated title
-      const updateResult = await this.chatSessionService.updateSession(id, userId, {
-        title: titleResult.data,
+      const updateResult = await this.chatSessionService.updateSession(id as string, userId as string, {
+        title: titleResult.data || '',
       });
 
       console.log('[ChatSessionController] Title updated in database');
@@ -436,8 +469,8 @@ export class ChatSessionController {
       const limit = parseInt(req.query.limit as string) || 50;
 
       const result = await this.chatSessionService.findByConnectionId(
-        connectionId,
-        userId,
+        connectionId as string,
+        userId as string,
         { page, limit }
       );
 
@@ -478,7 +511,7 @@ export class ChatSessionController {
       uuidSchema.parse(id);
 
       // Verify the chat session belongs to the user
-      const sessionCheck = await this.chatSessionService.findByIdWithMessages(id, userId!);
+      const sessionCheck = await this.chatSessionService.findByIdWithMessages(id as string, userId as string);
       if (!sessionCheck.success) {
         return res.status(404).json({
           success: false,
@@ -490,7 +523,7 @@ export class ChatSessionController {
       const maxMessagesToKeep = parseInt(req.query.maxMessages as string) || 10;
       const style = (req.query.style as 'brief' | 'detailed') || 'brief';
 
-      const result = await this.chatSummarizationService.getSummarizedContext(id, {
+      const result = await this.chatSummarizationService.getSummarizedContext(id as string, {
         maxMessagesToKeep,
         style,
       });

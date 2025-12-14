@@ -251,9 +251,9 @@ db-explorer-api/
 
 ```bash
 # Development
-npm run dev                    # Start development server with nodemon
-npm run dev:prod              # Start development server against production environment
-npm run dev:staging           # Start development server against staging environment
+npm run dev                    # Start development server with nodemon (NODE_ENV=development)
+npm run dev:prod              # Start development server with NODE_ENV=production (uses same .env file)
+npm run dev:staging           # Start development server with NODE_ENV=staging (uses same .env file)
 
 # Building
 npm run build                  # Compile TypeScript to dist/
@@ -294,9 +294,11 @@ Import from `src/validations/common.ts`:
 
 ## Environment Configuration
 
-Required environment variables:
+**Note**: This project uses a single `.env` file for all environments. The `NODE_ENV` variable in scripts is used for runtime behavior (logging, error handling, etc.), not for loading different environment files.
+
+Required environment variables (in `.env`):
 - `PORT` - Server port (default: 5000)
-- `NODE_ENV` - Environment (development/production)
+- `NODE_ENV` - Environment (development/production/staging) - set via scripts or manually
 - `SUPABASE_URL` - Supabase project URL
 - `SUPABASE_ANON_KEY` - Supabase anonymous key
 - `SUPABASE_SERVICE_ROLE_KEY` - Supabase service role key

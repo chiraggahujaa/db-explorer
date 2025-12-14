@@ -50,6 +50,8 @@ npm run dev          # http://localhost:3000
 ## 📝 Configuration
 
 ### Backend (.env)
+**Note**: Uses a single `.env` file for all environments. The `NODE_ENV` variable in npm scripts is for runtime behavior, not for loading different files.
+
 ```bash
 SUPABASE_URL=your-supabase-url
 SUPABASE_ANON_KEY=your-anon-key

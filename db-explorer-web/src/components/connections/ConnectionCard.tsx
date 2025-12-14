@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { MoreVertical, Edit, Trash2, UserPlus, Database, X, RefreshCw } from "lucide-react";
-import type { ConnectionWithRole } from "@/types/connection";
+import type { ConnectionWithRole, ConnectionRole } from "@/types/connection";
 
 interface ConnectionCardProps {
   connection: ConnectionWithRole;
@@ -33,6 +33,11 @@ export function ConnectionCard({
   isShared = false,
 }: ConnectionCardProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+
+  // Helper to get user role (handles both camelCase and snake_case from API)
+  const getUserRole = (conn: ConnectionWithRole & { user_role?: ConnectionRole }): ConnectionRole => {
+    return conn.userRole || (conn as any).user_role || 'viewer';
+  };
 
   const getDbTypeLabel = (type: string) => {
     const labels: Record<string, string> = {
@@ -131,7 +136,7 @@ export function ConnectionCard({
                 <RefreshCw className="mr-2 h-4 w-4" />
                 Re-train Schema
               </DropdownMenuItem>
-              {isShared && onRemove && connection.userRole !== "owner" && (
+              {isShared && onRemove && getUserRole(connection) !== "owner" && (
                 <DropdownMenuItem
                   variant="destructive"
                   onClick={(e) => {
@@ -145,7 +150,7 @@ export function ConnectionCard({
                   Remove
                 </DropdownMenuItem>
               )}
-              {(connection.userRole === "owner" || connection.userRole === "admin") && (
+              {(getUserRole(connection) === "owner" || getUserRole(connection) === "admin") && (
                 <DropdownMenuItem
                   variant="destructive"
                   onClick={(e) => {
@@ -170,10 +175,10 @@ export function ConnectionCard({
           </span>
           <span
             className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getRoleBadgeColor(
-              connection.userRole
+              getUserRole(connection)
             )}`}
           >
-            {connection.userRole.charAt(0).toUpperCase() + connection.userRole.slice(1)}
+            {getUserRole(connection).charAt(0).toUpperCase() + getUserRole(connection).slice(1)}
           </span>
           {!connection.isActive && (
             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-800/50 dark:text-gray-400 dark:border dark:border-gray-700/50">

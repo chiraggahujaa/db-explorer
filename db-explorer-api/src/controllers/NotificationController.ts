@@ -28,11 +28,11 @@ export class NotificationController {
       const filters: NotificationFilters = {
         page: parseInt(req.query.page as string) || 1,
         limit: parseInt(req.query.limit as string) || 20,
-        read: req.query.read === 'true' ? true : req.query.read === 'false' ? false : undefined,
+        ...(req.query.read === 'true' ? { read: true } : req.query.read === 'false' ? { read: false } : {}),
         type: req.query.type as any,
       };
 
-      const result = await notificationService.getUserNotifications(userId, filters);
+      const result = await notificationService.getUserNotifications(userId as string, filters);
 
       // Also include unread count
       const unreadCount = await notificationService.getUnreadCount(userId);
@@ -67,7 +67,7 @@ export class NotificationController {
         return;
       }
 
-      const result = await notificationService.findById(id);
+      const result = await notificationService.findById(id as string);
 
       if (!result.success || !result.data) {
         res.status(404).json({
@@ -113,7 +113,7 @@ export class NotificationController {
         return;
       }
 
-      const notification = await notificationService.markAsRead(id, userId);
+      const notification = await notificationService.markAsRead(id as string, userId as string);
 
       res.status(200).json({
         success: true,
@@ -144,7 +144,7 @@ export class NotificationController {
         return;
       }
 
-      const count = await notificationService.markAllAsRead(userId);
+      const count = await notificationService.markAllAsRead(userId as string);
 
       res.status(200).json({
         success: true,
@@ -177,7 +177,7 @@ export class NotificationController {
         return;
       }
 
-      await notificationService.deleteNotification(id, userId);
+      await notificationService.deleteNotification(id as string, userId as string);
 
       res.status(200).json({
         success: true,
@@ -208,7 +208,7 @@ export class NotificationController {
         return;
       }
 
-      const count = await notificationService.getUnreadCount(userId);
+      const count = await notificationService.getUnreadCount(userId as string);
 
       res.status(200).json({
         success: true,
@@ -239,7 +239,7 @@ export class NotificationController {
         return;
       }
 
-      const stats = await notificationService.getStats(userId);
+      const stats = await notificationService.getStats(userId as string);
 
       res.status(200).json({
         success: true,
@@ -270,7 +270,7 @@ export class NotificationController {
         return;
       }
 
-      const preferences = await notificationService.getUserPreferences(userId);
+      const preferences = await notificationService.getUserPreferences(userId as string);
 
       res.status(200).json({
         success: true,
@@ -311,7 +311,7 @@ export class NotificationController {
         return;
       }
 
-      const preference = await notificationService.updatePreference(id, userId, { enabled });
+      const preference = await notificationService.updatePreference(id as string, userId as string, { enabled });
 
       res.status(200).json({
         success: true,

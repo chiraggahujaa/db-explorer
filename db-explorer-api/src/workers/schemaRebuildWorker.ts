@@ -123,7 +123,7 @@ export async function registerSchemaRebuildWorker(): Promise<void> {
         }
 
         // Step 4: Process and cache schema (80%)
-        const totalTables = (schemaData.schema_data as any)?.total_tables || 0;
+        const totalTables = (schemaData.schemaData as any)?.total_tables || 0;
         await jobService.updateProgress(job.id, {
           current: 4,
           total: 5,
@@ -157,7 +157,7 @@ export async function registerSchemaRebuildWorker(): Promise<void> {
         });
 
         const duration = Date.now() - startTime;
-        const schemaDataObj = schemaData.schema_data as any;
+        const schemaDataObj = schemaData.schemaData as any;
         const result: SchemaRebuildResult = {
           success: true,
           connectionId,

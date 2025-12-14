@@ -65,7 +65,7 @@ export class JobController {
         return;
       }
 
-      const job = await jobService.getJob(id);
+      const job = await jobService.getJob(id as string);
 
       if (!job) {
         res.status(404).json({
@@ -76,7 +76,7 @@ export class JobController {
       }
 
       // Check if user owns the job
-      if (job.data?.userId !== userId) {
+      if (job.data?.userId !== userId as string) {
         res.status(403).json({
           success: false,
           error: 'Forbidden',
@@ -120,7 +120,7 @@ export class JobController {
         type: req.query.type as any,
       };
 
-      const result = await jobService.getUserJobs(userId, filters);
+      const result = await jobService.getUserJobs(userId as string, filters);
 
       res.status(200).json(result);
     } catch (error: any) {
@@ -150,7 +150,7 @@ export class JobController {
       }
 
       // Verify ownership
-      const job = await jobService.getJob(id);
+      const job = await jobService.getJob(id as string);
       if (!job) {
         res.status(404).json({
           success: false,
@@ -159,7 +159,7 @@ export class JobController {
         return;
       }
 
-      if (job.data?.userId !== userId) {
+      if (job.data?.userId !== userId as string) {
         res.status(403).json({
           success: false,
           error: 'Forbidden',
@@ -167,7 +167,7 @@ export class JobController {
         return;
       }
 
-      await jobService.cancelJob(id);
+      await jobService.cancelJob(id as string);
 
       res.status(200).json({
         success: true,
@@ -200,7 +200,7 @@ export class JobController {
       }
 
       // Verify ownership
-      const job = await jobService.getJob(id);
+      const job = await jobService.getJob(id as string);
       if (!job) {
         res.status(404).json({
           success: false,
@@ -209,7 +209,7 @@ export class JobController {
         return;
       }
 
-      if (job.data?.userId !== userId) {
+      if (job.data?.userId !== userId as string) {
         res.status(403).json({
           success: false,
           error: 'Forbidden',
@@ -217,7 +217,7 @@ export class JobController {
         return;
       }
 
-      const newJobId = await jobService.retryJob(id);
+      const newJobId = await jobService.retryJob(id as string);
 
       res.status(200).json({
         success: true,

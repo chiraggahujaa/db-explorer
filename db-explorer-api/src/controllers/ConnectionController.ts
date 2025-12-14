@@ -42,7 +42,7 @@ export class ConnectionController {
       }
 
       const includeShared = req.query.include_shared !== 'false';
-      const result = await this.connectionService.getUserConnections(userId, includeShared);
+      const result = await this.connectionService.getUserConnections(userId as string, includeShared);
 
       res.status(200).json(result);
     } catch (error: any) {
@@ -71,7 +71,7 @@ export class ConnectionController {
       const { id } = req.params;
       uuidSchema.parse(id);
 
-      const result = await this.connectionService.getConnectionById(id, userId);
+      const result = await this.connectionService.getConnectionById(id as string, userId as string);
 
       if (!result.success) {
         return res.status(404).json(result);
@@ -123,7 +123,7 @@ export class ConnectionController {
           error: 'Invalid connection ID',
         });
       }
-      const result = await this.connectionService.getConnectionByIdInternal(id, userId);
+      const result = await this.connectionService.getConnectionByIdInternal(id, userId as string);
 
       if (!result.success) {
         return res.status(404).json(result);
@@ -163,16 +163,43 @@ export class ConnectionController {
       }
 
       const validatedData = createConnectionSchema.parse(req.body);
-      const result = await this.connectionService.createConnection(userId, validatedData);
+      
+      // Filter out undefined values to satisfy exactOptionalPropertyTypes
+      // Remove undefined from optional config properties
+      let cleanConfig: typeof validatedData.config = validatedData.config;
+      if (cleanConfig.type === 'mysql' || cleanConfig.type === 'postgresql') {
+        const sqlConfig = { ...cleanConfig };
+        if (sqlConfig.ssl === undefined) {
+          delete (sqlConfig as any).ssl;
+        }
+        cleanConfig = sqlConfig as typeof validatedData.config;
+      }
+      if (cleanConfig.type === 'supabase') {
+        const supabaseConfig = { ...cleanConfig };
+        if (supabaseConfig.db_password === undefined) {
+          delete (supabaseConfig as any).db_password;
+        }
+        cleanConfig = supabaseConfig as typeof validatedData.config;
+      }
+      
+      const connectionData = {
+        name: validatedData.name,
+        db_type: validatedData.db_type,
+        config: cleanConfig,
+        ...(validatedData.description !== undefined && { description: validatedData.description }),
+      };
+      
+      const result = await this.connectionService.createConnection(userId as string, connectionData as any);
 
       // Trigger schema training asynchronously (don't wait for it to complete)
       if (result.success && result.data?.id) {
-        this.schemaTrainingService.trainSchema(result.data.id, userId, false)
+        const connectionId = result.data.id;
+        this.schemaTrainingService.trainSchema(connectionId, userId as string, false)
           .then(() => {
-            console.log(`Schema training completed for connection ${result.data.id}`);
+            console.log(`Schema training completed for connection ${connectionId}`);
           })
           .catch((error) => {
-            console.error(`Schema training failed for connection ${result.data.id}:`, error);
+            console.error(`Schema training failed for connection ${connectionId}:`, error);
           });
       }
 
@@ -213,7 +240,21 @@ export class ConnectionController {
       uuidSchema.parse(id);
 
       const validatedData = updateConnectionSchema.parse(req.body);
-      const result = await this.connectionService.updateConnection(id, userId, validatedData);
+      
+      // Filter out undefined values to satisfy exactOptionalPropertyTypes
+      const updateData: {
+        name?: string;
+        description?: string;
+        config?: typeof validatedData.config;
+        is_active?: boolean;
+      } = {
+        ...(validatedData.name !== undefined && { name: validatedData.name }),
+        ...(validatedData.description !== undefined && { description: validatedData.description }),
+        ...(validatedData.config !== undefined && { config: validatedData.config }),
+        ...(validatedData.is_active !== undefined && { is_active: validatedData.is_active }),
+      };
+      
+      const result = await this.connectionService.updateConnection(id as string, userId as string, updateData as any);
 
       if (!result.success) {
         return res.status(403).json(result);
@@ -255,7 +296,7 @@ export class ConnectionController {
       const { id } = req.params;
       uuidSchema.parse(id);
 
-      const result = await this.connectionService.deleteConnection(id, userId);
+      const result = await this.connectionService.deleteConnection(id as string, userId as string);
 
       if (!result.success) {
         return res.status(403).json(result);
@@ -297,7 +338,7 @@ export class ConnectionController {
       const { id } = req.params;
       uuidSchema.parse(id);
 
-      const result = await this.connectionService.getConnectionMembers(id, userId);
+      const result = await this.connectionService.getConnectionMembers(id as string, userId as string);
 
       if (!result.success) {
         return res.status(403).json(result);
@@ -341,7 +382,7 @@ export class ConnectionController {
       uuidSchema.parse(memberId);
 
       const { role } = updateMemberRoleSchema.parse(req.body);
-      const result = await this.connectionService.updateMemberRole(id, memberId, userId, role);
+      const result = await this.connectionService.updateMemberRole(id as string, memberId as string, userId as string, role);
 
       if (!result.success) {
         return res.status(403).json(result);
@@ -384,7 +425,7 @@ export class ConnectionController {
       uuidSchema.parse(id);
       uuidSchema.parse(memberId);
 
-      const result = await this.connectionService.removeMember(id, memberId, userId);
+      const result = await this.connectionService.removeMember(id as string, memberId as string, userId as string);
 
       if (!result.success) {
         return res.status(403).json(result);
@@ -426,7 +467,7 @@ export class ConnectionController {
       const { id } = req.params;
       uuidSchema.parse(id);
 
-      const result = await this.connectionService.leaveConnection(id, userId);
+      const result = await this.connectionService.leaveConnection(id as string, userId as string);
 
       if (!result.success) {
         return res.status(403).json(result);
@@ -477,9 +518,9 @@ export class ConnectionController {
       
       // Create invitations for all emails with the same role
       const result = await this.invitationService.createBulkInvitations(
-        id,
+        id as string,
         emailsToInvite.map((email) => ({ email, role })),
-        userId
+        userId as string
       );
 
       if (!result.success) {
@@ -522,7 +563,7 @@ export class ConnectionController {
       const { id } = req.params;
       uuidSchema.parse(id);
 
-      const result = await this.invitationService.getConnectionInvitations(id, userId);
+      const result = await this.invitationService.getConnectionInvitations(id as string, userId as string);
 
       if (!result.success) {
         return res.status(403).json(result);
@@ -561,7 +602,7 @@ export class ConnectionController {
         });
       }
 
-      const result = await this.invitationService.getUserInvitations(userId);
+      const result = await this.invitationService.getUserInvitations(userId as string);
 
       res.status(200).json(result);
     } catch (error: any) {
@@ -590,7 +631,7 @@ export class ConnectionController {
       const { id } = req.params;
       uuidSchema.parse(id);
 
-      const result = await this.invitationService.acceptInvitation(id, userId);
+      const result = await this.invitationService.acceptInvitation(id as string, userId as string);
 
       if (!result.success) {
         return res.status(400).json(result);
@@ -632,7 +673,7 @@ export class ConnectionController {
       const { id } = req.params;
       uuidSchema.parse(id);
 
-      const result = await this.invitationService.declineInvitation(id, userId);
+      const result = await this.invitationService.declineInvitation(id as string, userId as string);
 
       if (!result.success) {
         return res.status(400).json(result);
@@ -674,7 +715,7 @@ export class ConnectionController {
       const { id } = req.params;
       uuidSchema.parse(id);
 
-      const result = await this.invitationService.cancelInvitation(id, userId);
+      const result = await this.invitationService.cancelInvitation(id as string, userId as string);
 
       if (!result.success) {
         return res.status(403).json(result);
@@ -718,7 +759,7 @@ export class ConnectionController {
       uuidSchema.parse(invitationId);
 
       // Verify user has permission (owner or admin)
-      const invitationsResult = await this.invitationService.getConnectionInvitations(id, userId);
+      const invitationsResult = await this.invitationService.getConnectionInvitations(id as string, userId as string);
       if (!invitationsResult.success) {
         return res.status(403).json(invitationsResult);
       }
@@ -814,7 +855,7 @@ export class ConnectionController {
         });
       }
 
-      const result = await this.invitationService.acceptInvitationByToken(token, userId);
+      const result = await this.invitationService.acceptInvitationByToken(token, userId as string);
       if (!result.success) {
         return res.status(400).json(result);
       }
@@ -846,7 +887,7 @@ export class ConnectionController {
       const { id } = req.params;
       uuidSchema.parse(id);
 
-      const result = await this.databaseExplorerService.getSchemas(id, userId as string);
+      const result = await this.databaseExplorerService.getSchemas(id as string, userId as string);
 
       if (!result.success) {
         return res.status(404).json(result);
@@ -890,7 +931,7 @@ export class ConnectionController {
 
       const schemaName = req.query.schema as string | undefined;
 
-      const result = await this.databaseExplorerService.getTables(id, userId as string, schemaName);
+      const result = await this.databaseExplorerService.getTables(id as string, userId as string, schemaName);
 
       if (!result.success) {
         return res.status(404).json(result);
@@ -940,7 +981,7 @@ export class ConnectionController {
       }
 
       const result = await this.databaseExplorerService.getTableSchema(
-        id,
+        id as string,
         userId as string,
         schemaName,
         tableName
@@ -997,7 +1038,7 @@ export class ConnectionController {
       }
 
       const result = await this.databaseExplorerService.executeStructuredQuery(
-        id,
+        id as string,
         userId as string,
         query
       );
@@ -1053,7 +1094,7 @@ export class ConnectionController {
       }
 
       const result = await this.databaseExplorerService.executeSql(
-        id,
+        id as string,
         userId as string,
         query,
         schema
@@ -1102,7 +1143,7 @@ export class ConnectionController {
       const { force = false, schemas, config } = req.body;
 
       // Verify user has access to this connection
-      const connection = await this.connectionService.findById(id);
+      const connection = await this.connectionService.findById(id as string);
       if (!connection.success || !connection.data) {
         return res.status(404).json({
           success: false,
@@ -1117,8 +1158,8 @@ export class ConnectionController {
       const jobId = await jobService.createJob(
         'schema-rebuild',
         {
-          connectionId: id,
-          userId,
+          connectionId: id as string,
+          userId: userId as string,
           force,
           schemas, // Array of {schema, tables?} for selective training
           config,  // Training configuration options

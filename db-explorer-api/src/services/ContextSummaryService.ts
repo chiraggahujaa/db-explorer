@@ -188,12 +188,12 @@ export class ContextSummaryService extends BaseService {
         t => t.tableName === tableInfo.tableName
       );
 
-      if (existingTableIndex >= 0) {
+      if (existingTableIndex >= 0 && tablesInfo[existingTableIndex]) {
         // Update existing table info
         tablesInfo[existingTableIndex] = {
           ...tablesInfo[existingTableIndex],
           ...tableInfo,
-          usageCount: (tablesInfo[existingTableIndex].usageCount || 0) + 1,
+          usageCount: (tablesInfo[existingTableIndex]?.usageCount || 0) + 1,
         };
       } else {
         // Add new table info
@@ -213,7 +213,7 @@ export class ContextSummaryService extends BaseService {
       await this.upsertContextSnapshot({
         chatSessionId,
         tablesInfo,
-        schemaName: existingSnapshot?.schemaName,
+        ...(existingSnapshot?.schemaName !== undefined && { schemaName: existingSnapshot.schemaName }),
         recentCommands: existingSnapshot?.recentCommands as string[],
       });
 

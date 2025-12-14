@@ -135,11 +135,14 @@ export function MessageMarkdown({ content, className }: MessageMarkdownProps) {
           );
         },
         // Customize pre blocks
-        pre: ({ node, children, ...props }) => (
-          <div className="relative my-2" {...props}>
-            {children}
-          </div>
-        ),
+        pre: ({ node, children, ...props }) => {
+          const { ref, ...divProps } = props as any;
+          return (
+            <div className="relative my-2" {...divProps}>
+              {children}
+            </div>
+          );
+        },
         // Customize headings
         h1: ({ node, children, ...props }) => (
           <h1 className="text-lg font-bold mb-2 mt-4 first:mt-0" {...props}>

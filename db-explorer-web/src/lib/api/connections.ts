@@ -18,12 +18,49 @@ export const connectionsAPI = {
     const res = await api.get('/api/connections', {
       params: { include_shared: includeShared },
     });
+    // Transform snake_case to camelCase
+    if (res.data.success && res.data.data) {
+      const transformConnection = (conn: any) => ({
+        ...conn,
+        userRole: conn.user_role || conn.userRole,
+        dbType: conn.db_type || conn.dbType,
+        createdBy: conn.created_by || conn.createdBy,
+        isActive: conn.is_active !== undefined ? conn.is_active : conn.isActive,
+        createdAt: conn.created_at || conn.createdAt,
+        updatedAt: conn.updated_at || conn.updatedAt,
+        memberCount: conn.member_count || conn.memberCount,
+      });
+      return {
+        ...res.data,
+        data: {
+          owned: (res.data.data.owned || []).map(transformConnection),
+          shared: (res.data.data.shared || []).map(transformConnection),
+        },
+      };
+    }
     return res.data;
   },
 
   // Get a single connection by ID
   getConnection: async (id: string): Promise<ConnectionResponse> => {
     const res = await api.get(`/api/connections/${id}`);
+    // Transform snake_case to camelCase
+    if (res.data.success && res.data.data) {
+      const conn = res.data.data;
+      return {
+        ...res.data,
+        data: {
+          ...conn,
+          userRole: conn.user_role || conn.userRole,
+          dbType: conn.db_type || conn.dbType,
+          createdBy: conn.created_by || conn.createdBy,
+          isActive: conn.is_active !== undefined ? conn.is_active : conn.isActive,
+          createdAt: conn.created_at || conn.createdAt,
+          updatedAt: conn.updated_at || conn.updatedAt,
+          memberCount: conn.member_count || conn.memberCount,
+        },
+      };
+    }
     return res.data;
   },
 
