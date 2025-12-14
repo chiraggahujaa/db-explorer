@@ -109,7 +109,7 @@ export async function POST(req: Request) {
     console.log(`[Chat API] Using comprehensive prompt with ${schemaDataContext ? 'pre-loaded schema' : 'dynamic schema discovery'}`);
 
 
-    const model = 'gemini-2.5-flash';
+    const model = process.env.NEXT_PUBLIC_GEMINI_MODEL || 'gemini-2.5-flash';
 
     console.log(`[Chat API] Using model: ${model}, caching: ${canUseCache}`);
     console.log('[Chat API] Received messages!');

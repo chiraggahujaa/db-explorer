@@ -110,9 +110,12 @@ ${conversationText}
 
 Summary:`;
 
+      // Get model from environment variable or fallback to default
+      const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+
       // Call Gemini API
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
         {
           method: 'POST',
           headers: {
