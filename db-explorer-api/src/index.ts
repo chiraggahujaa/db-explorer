@@ -36,9 +36,11 @@ import { jobService } from './services/JobService.js';
 import { webSocketService } from './services/WebSocketService.js';
 import { registerAllWorkers } from './workers/index.js';
 
+// Load environment variables from single .env file
+dotenv.config();
+
 const environment = process.env.NODE_ENV || 'development';
 console.log(`Loading environment: ${environment}`);
-dotenv.config({ path: `.env.${environment}` });
 
 const app = express();
 const PORT = process.env.PORT || 5000;

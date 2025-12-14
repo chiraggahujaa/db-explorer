@@ -2,8 +2,10 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import * as dotenv from 'dotenv';
 import { getFrontendUrl } from '../utils/environment.js';
 
+// Load environment variables from single .env file
+dotenv.config();
+
 const environment = process.env.NODE_ENV || 'development';
-dotenv.config({ path: `.env.${environment}` });
 
 // Production environment warning
 if (environment === 'production') {
