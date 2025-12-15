@@ -56,9 +56,18 @@ export default function Header() {
       <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between gap-3">
           {/* Left: Logo */}
-          <div className="flex min-w-0 flex-1 items-center gap-6">
-            <Link href="/" className="shrink-0 font-bold text-xl sm:text-2xl">
-              DB Explorer
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <Link href="/" className="shrink-0 flex items-center">
+              <picture>
+                <source srcSet="/logo-40.png" media="(min-width: 640px)" />
+                <img
+                  src="/logo-32.png"
+                  alt="DB Explorer"
+                  className="h-8 w-8 sm:h-10 sm:w-10"
+                  width={32}
+                  height={32}
+                />
+              </picture>
             </Link>
           </div>
 
