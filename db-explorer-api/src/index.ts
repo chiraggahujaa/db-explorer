@@ -12,6 +12,7 @@ import invitationRoutes from './routes/invitations.js';
 import chatSessionRoutes from './routes/chatSessions.js';
 import jobRoutes from './routes/jobs.js';
 import notificationRoutes from './routes/notifications.js';
+import toolPermissionRoutes from './routes/toolPermissions.js';
 
 // Import middleware
 import {
@@ -98,6 +99,7 @@ app.use('/api/invitations', apiRateLimit, invitationRoutes);
 app.use('/api/chat-sessions', apiRateLimit, chatSessionRoutes);
 app.use('/api/jobs', apiRateLimit, jobRoutes);
 app.use('/api/notifications', apiRateLimit, notificationRoutes);
+app.use('/api/tool-permissions', apiRateLimit, toolPermissionRoutes);
 
 // 404 handler - must be after all routes
 app.use((req: Request, res: Response) => {
