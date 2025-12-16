@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls } from "ai";
-import { Send, Sparkles, Database, Loader2, Square, ChevronDown, ChevronUp, Plus, RotateCcw } from "lucide-react";
+import { Send, Sparkles, Database, Loader2, Square, ChevronDown, ChevronUp, Plus, RotateCcw, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -20,6 +20,7 @@ import { ContextIndicator } from "./ContextIndicator";
 import { ToolCallsSidebar } from "./ToolCallsSidebar";
 import { ChatConfigPopover } from "./ChatConfigPopover";
 import { SQLDisplay } from "./SQLDisplay";
+import { SQLExecutionDialog } from "./SQLExecutionDialog";
 import { useChatStore } from "@/stores/useChatStore";
 import { useConnectionExplorer } from "@/contexts/ConnectionExplorerContext";
 import { useQueryClient } from "@tanstack/react-query";
@@ -138,6 +139,8 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
   const [isToolSidebarOpen, setIsToolSidebarOpen] = useState(false);
   const [currentStatusMessage, setCurrentStatusMessage] = useState("Ready");
   const [statusMessageIndex, setStatusMessageIndex] = useState(0);
+  const [incognitoAutoExecute, setIncognitoAutoExecute] = useState(false);
+  const [sqlExecutionDialog, setSqlExecutionDialog] = useState<{ open: boolean; sql: string }>({ open: false, sql: '' });
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const { chatConfig } = useConnectionExplorer();
@@ -176,7 +179,7 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
   const contextManager = getContextManager();
   const contextWindow = contextManager.getContextWindow(chatHistory);
 
-  const {
+    const {
     messages,
     status,
     error,
@@ -184,8 +187,6 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
     stop,
     setMessages,
   } = useChat({
-    // CRITICAL: Automatically continue after tool execution completes
-    // This ensures the AI generates text responses after calling tools
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
     transport: new DefaultChatTransport({
       api: '/api/chat',
@@ -235,19 +236,13 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
       const sessionId = currentChatSessionIdRef.current;
 
       if (!sessionId) {
-        console.error('[ChatInterface] No chat session to save to (checked ref)');
         return;
       }
 
       const userText = lastSentUserMessageRef.current;
       const assistantText = getMessageText(message);
 
-      if (!userText) {
-        console.error('[ChatInterface] No user message found in ref - this should not happen');
-        return;
-      }
-
-      if (!assistantText || assistantText.trim().length === 0) {
+      if (!userText || !assistantText || assistantText.trim().length === 0) {
         return;
       }
 
@@ -262,14 +257,11 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
         queryClient.invalidateQueries({ queryKey: ["chat-sessions", connection.id] });
 
         if (!titleGeneratedRef.current) {
-          console.log('[ChatInterface] Generating title for first exchange (after messages saved)');
           await generateChatTitle(userText);
           titleGeneratedRef.current = true;
-          console.log('[ChatInterface] Title generated successfully!');
           queryClient.invalidateQueries({ queryKey: ["chat-sessions", connection.id] });
         }
       } catch (error) {
-        console.error('[ChatInterface] Failed to save messages:', error);
         toast.error('Failed to save chat history');
       }
     },
@@ -288,21 +280,16 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
   useEffect(() => {
     const loadExistingChat = async () => {
       if (chatSessionId) {
-        console.log('[ChatInterface] Loading existing chat:', chatSessionId);
         await loadChatHistory(chatSessionId);
 
         const { currentChatSession, chatHistory: loadedHistory } = useChatStore.getState();
 
         if (currentChatSession) {
-          console.log('[ChatInterface] Restoring context from chat session');
-
           if (currentChatSession.selectedSchema) {
-            console.log('[ChatInterface] Restoring schema:', currentChatSession.selectedSchema);
             setSelectedSchemaInContext(currentChatSession.selectedSchema);
           }
 
           if (currentChatSession.selectedTables && currentChatSession.selectedTables.length > 0) {
-            console.log('[ChatInterface] Restoring tables:', currentChatSession.selectedTables);
             setSelectedTablesInContext(currentChatSession.selectedTables);
           }
         }
@@ -318,7 +305,6 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
           lastProcessedUserMessageRef.current = null;
         }
       } else {
-        console.log('[ChatInterface] Starting new chat');
         clearCurrentChat();
         setMessages([]);
         titleGeneratedRef.current = false;
@@ -339,22 +325,12 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
     e.preventDefault();
 
     const messageToSend = input.trim();
-    console.log('[ChatInterface] handleSubmit called with message:', messageToSend.substring(0, 50));
-    console.log('[ChatInterface] Current status:', status);
-    console.log('[ChatInterface] Current chat session ID:', currentChatSessionId);
 
     if (!messageToSend || status === 'streaming' || status === 'submitted') {
-      console.log('[ChatInterface] Skipping submit - invalid state');
       return;
     }
 
     if (!currentChatSessionId) {
-      console.log('[ChatInterface] No current session, creating new chat session...');
-      console.log('[ChatInterface] Connection ID:', connection.id);
-      console.log('[ChatInterface] Selected schema:', selectedSchema);
-      console.log('[ChatInterface] Selected tables:', Array.from(selectedTables));
-      console.log('[ChatInterface] Chat config:', chatConfig);
-
       const newSession = await createNewChat(
         connection.id,
         selectedSchema,
@@ -362,28 +338,17 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
         chatConfig
       );
 
-      console.log('[ChatInterface] New session result:', newSession);
-
       if (!newSession) {
-        console.error('[ChatInterface] Failed to create chat session');
         toast.error('Failed to create chat session');
         return;
       }
 
-      console.log('[ChatInterface] Chat session created successfully:', newSession.id);
-
       currentChatSessionIdRef.current = newSession.id;
-      console.log('[ChatInterface] Updated session ID ref to:', newSession.id);
-    } else {
-      console.log('[ChatInterface] Using existing session:', currentChatSessionId);
     }
 
     lastSentUserMessageRef.current = messageToSend;
-    console.log('[ChatInterface] Stored user message in ref for later retrieval');
     lastProcessedUserMessageRef.current = null;
-    console.log('[ChatInterface] Cleared processed message ref for new message');
     setInput("");
-    console.log('[ChatInterface] Sending message to AI...');
     sendMessage({ text: messageToSend });
   };
 
@@ -396,6 +361,131 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
 
   const handleExampleClick = (exampleText: string) => {
     setInput(exampleText);
+  };
+
+  const handleSQLExecutionRequest = (sql: string) => {
+    if (incognitoAutoExecute) {
+      executeSQLQuery(sql);
+    } else {
+      setSqlExecutionDialog({ open: true, sql });
+    }
+  };
+
+  const executeSQLQuery = async (sql: string) => {
+    setSqlExecutionDialog({ open: false, sql: '' });
+    setCurrentStatusMessage('Executing query...');
+
+    try {
+      const token = typeof window !== 'undefined'
+        ? localStorage.getItem('access_token') || sessionStorage.getItem('access_token')
+        : null;
+
+      if (!token) {
+        throw new Error('Authentication required');
+      }
+
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/connections/${connection.id}/execute`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          query: sql,
+          schema: selectedSchema,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to execute query');
+      }
+
+      const result = await response.json();
+
+      let resultText = '\n\n**Query Results:**\n\n';
+
+      if (result.data && Array.isArray(result.data) && result.data.length > 0) {
+        const columns = Object.keys(result.data[0]);
+        const header = `| ${columns.join(' | ')} |`;
+        const separator = `| ${columns.map(() => '---').join(' | ')} |`;
+        const rows = result.data.map((row: any) =>
+          `| ${columns.map(col => String(row[col] ?? 'NULL')).join(' | ')} |`
+        ).join('\n');
+
+        resultText += `${header}\n${separator}\n${rows}\n\n`;
+        resultText += `*${result.data.length} row(s) returned*`;
+      } else {
+        resultText += '*Query executed successfully. No rows returned.*';
+      }
+
+      setMessages((prevMessages) => {
+        const lastMessageIndex = prevMessages.length - 1;
+        if (lastMessageIndex >= 0 && prevMessages[lastMessageIndex].role === 'assistant') {
+          const updatedMessages = [...prevMessages];
+          const lastMessage = updatedMessages[lastMessageIndex];
+
+          if (lastMessage.parts && Array.isArray(lastMessage.parts)) {
+            const newParts = [...lastMessage.parts];
+            newParts.push({
+              type: 'text',
+              text: resultText
+            });
+            updatedMessages[lastMessageIndex] = {
+              ...lastMessage,
+              parts: newParts
+            };
+          }
+
+          return updatedMessages;
+        }
+        return prevMessages;
+      });
+
+      toast.success('Query executed successfully');
+      setCurrentStatusMessage('Ready');
+
+    } catch (error: any) {
+      toast.error('Execution failed', {
+        description: error.message || 'Failed to execute SQL query'
+      });
+      setCurrentStatusMessage('Ready');
+
+      setMessages((prevMessages) => {
+        const lastMessageIndex = prevMessages.length - 1;
+        if (lastMessageIndex >= 0 && prevMessages[lastMessageIndex].role === 'assistant') {
+          const updatedMessages = [...prevMessages];
+          const lastMessage = updatedMessages[lastMessageIndex];
+
+          const errorText = `\n\n**Execution Error:**\n\n❌ ${error.message}`;
+
+          if (lastMessage.parts && Array.isArray(lastMessage.parts)) {
+            const newParts = [...lastMessage.parts];
+            newParts.push({
+              type: 'text',
+              text: errorText
+            });
+            updatedMessages[lastMessageIndex] = {
+              ...lastMessage,
+              parts: newParts
+            };
+          }
+
+          return updatedMessages;
+        }
+        return prevMessages;
+      });
+    }
+  };
+
+  const handleExecuteOnce = () => {
+    executeSQLQuery(sqlExecutionDialog.sql);
+  };
+
+  const handleExecuteAndRemember = () => {
+    setIncognitoAutoExecute(true);
+    executeSQLQuery(sqlExecutionDialog.sql);
+    toast.success('Auto-execute enabled for this session');
   };
 
   const isLoading = status === 'streaming' || status === 'submitted';
@@ -463,6 +553,15 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
                 </div>
               )}
 
+              {chatConfig.incognitoMode && (
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-purple-100 dark:bg-purple-900/30">
+                  <EyeOff className="w-3 h-3 text-purple-500" />
+                  <span className="text-xs font-medium text-purple-700 dark:text-purple-400">
+                    Incognito
+                  </span>
+                </div>
+              )}
+
               {chatHistory.length > 0 && (
                 <ContextIndicator
                   percentageUsed={contextWindow.percentageUsed}
@@ -498,7 +597,6 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
                       size="icon"
                       className="h-9 w-9"
                       onClick={() => {
-                        console.log('[ChatInterface] Clearing messages for new session');
                         setMessages([]);
                         titleGeneratedRef.current = false;
                         lastProcessedUserMessageRef.current = null;
@@ -620,6 +718,23 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
                 <ChatContextSummary chatSessionId={chatSessionId!} className="mb-4" />
               )}
 
+              {chatConfig.incognitoMode && messages.length === 0 && (
+                <div className="mt-4 p-4 rounded-lg bg-purple-500/10 border border-purple-500/20">
+                  <div className="flex items-start gap-2">
+                    <EyeOff className="w-5 h-5 text-purple-500 mt-0.5 shrink-0" />
+                    <div className="flex-1 text-left">
+                      <p className="text-sm font-medium text-purple-500">
+                        Incognito Mode Active
+                      </p>
+                      <p className="text-xs text-purple-500/80 mt-1">
+                        AI can see database structure but not actual data.
+                        Perfect for exploring schema without exposing sensitive information.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {messages.map((msg, index) => {
                 const messageText = getMessageText(msg);
                 const toolCalls = getToolCalls(msg);
@@ -659,7 +774,11 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
 
                           {messageText && (
                             <div className="bg-card rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm border">
-                              <MessageMarkdown content={messageText} />
+                              <MessageMarkdown
+                                content={messageText}
+                                isIncognitoMode={chatConfig.incognitoMode}
+                                onSQLExecutionRequest={handleSQLExecutionRequest}
+                              />
                             </div>
                           )}
                         </div>
@@ -721,6 +840,8 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
                 placeholder={
                   schemaError
                     ? "Please train the schema first..."
+                    : chatConfig.incognitoMode
+                    ? "Ask about schema or generate SQL... (Incognito: no data access)"
                     : "Ask a question or write SQL... (Shift + Enter for new line)"
                 }
                 className="pr-12 min-h-12 max-h-40 resize-none rounded-2xl border-2 focus-visible:ring-2 focus-visible:ring-primary py-3"
@@ -785,6 +906,14 @@ export function ChatInterfaceNew({ connection, chatSessionId, onNewChat }: ChatI
         toolCalls={allToolCalls}
         isOpen={isToolSidebarOpen}
         onToggle={() => setIsToolSidebarOpen(!isToolSidebarOpen)}
+      />
+
+      <SQLExecutionDialog
+        open={sqlExecutionDialog.open}
+        onOpenChange={(open) => setSqlExecutionDialog({ ...sqlExecutionDialog, open })}
+        sql={sqlExecutionDialog.sql}
+        onExecuteOnce={handleExecuteOnce}
+        onExecuteAndRemember={handleExecuteAndRemember}
       />
     </>
   );

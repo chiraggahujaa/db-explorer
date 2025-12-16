@@ -36,7 +36,6 @@ export function ChatConfigPopover() {
 
           <Separator />
 
-          {/* Read Only Mode */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label htmlFor="read-only-mode" className="text-sm font-normal">
@@ -57,7 +56,6 @@ export function ChatConfigPopover() {
 
           <Separator />
 
-          {/* SQL Generation */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label htmlFor="show-sql" className="text-sm font-normal">
@@ -78,7 +76,26 @@ export function ChatConfigPopover() {
 
           <Separator />
 
-          {/* Auto-execute Queries */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="incognito-mode" className="text-sm font-normal">
+                Incognito Mode
+              </Label>
+              <Switch
+                id="incognito-mode"
+                checked={chatConfig.incognitoMode}
+                onCheckedChange={(checked) =>
+                  updateChatConfig({ incognitoMode: checked })
+                }
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              AI can only see schema metadata. No access to actual row data.
+            </p>
+          </div>
+
+          <Separator />
+
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label htmlFor="auto-execute" className="text-sm font-normal">
@@ -99,7 +116,6 @@ export function ChatConfigPopover() {
 
           <Separator />
 
-          {/* Result Row Limit */}
           <div className="space-y-3">
             <div className="flex justify-between items-center">
               <Label htmlFor="row-limit" className="text-sm font-normal">

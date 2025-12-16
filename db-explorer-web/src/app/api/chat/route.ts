@@ -14,14 +14,12 @@ import { getDatabaseAssistantPrompt } from '@/lib/prompts/database-assistant-pro
 export const maxDuration = 60;
 export const runtime = 'nodejs';
 
-// Helper to execute database queries via API
 async function executeDBQuery(connectionId: string, endpoint: string, params: any = {}, accessToken?: string, method: 'GET' | 'POST' = 'POST') {
   try {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
 
-    // Add authorization header if token is provided
     if (accessToken) {
       headers['Authorization'] = `Bearer ${accessToken}`;
     }
@@ -40,7 +38,6 @@ async function executeDBQuery(connectionId: string, endpoint: string, params: an
 
 export async function POST(req: Request) {
   try {
-    // Extract access token from Authorization header
     const authHeader = req.headers.get('Authorization');
     const accessToken = authHeader?.replace('Bearer ', '');
 
@@ -60,80 +57,61 @@ export async function POST(req: Request) {
       );
     }
 
-    // Fetch schema cache (optional) - this provides detailed database structure
     let schemaCache;
     let schemaDataContext = '';
     let canUseCache = false;
 
     try {
-      // server-side API call
       const schemaCacheResponse = await executeDBQuery(connectionId, 'schema-cache', {}, accessToken, 'GET');
       if (schemaCacheResponse.success && schemaCacheResponse.data) {
         schemaCache = schemaCacheResponse.data;
       }
     } catch (error) {
-      console.log('[Chat API] Schema not trained, continuing without schema context');
+      // Schema not trained, continuing without schema context
     }
 
     if (schemaCache) {
-      // Format schema for AI - using CONCISE version to reduce token usage by 95-99%
+      if (chatConfig?.incognitoMode) {
+        schemaCache = JSON.parse(JSON.stringify(schemaCache));
+
+        if (schemaCache.schemas) {
+          schemaCache.schemas = schemaCache.schemas.map((schema: any) => ({
+            ...schema,
+            tables: schema.tables?.map((table: any) => ({
+              ...table,
+              sampleData: undefined,
+              statistics: undefined,
+            }))
+          }));
+        }
+      }
+
       schemaDataContext = formatSchemaForAIConcise(schemaCache);
       const schemaTokens = estimateTokens(schemaDataContext);
 
-      console.log(`[Chat API] Schema data tokens: ${schemaTokens}`);
-
-      // Add stale warning if needed
       if (isSchemaStale(schemaCache.lastTrainedAt)) {
         schemaDataContext += '\n\n⚠️ **NOTE:** Schema is older than 7 days. Consider retraining for accuracy.\n';
       }
 
-      // Gemini 2.5 Flash supports implicit caching (75% discount on cached prefixes)
-      // Minimum tokens for caching: 1,024 tokens for Flash
       const finalTokens = estimateTokens(schemaDataContext);
       canUseCache = finalTokens >= 1024;
-
-      console.log(`[Chat API] Schema eligible for caching: ${canUseCache}`);
-    } else {
-      console.log('[Chat API] No schema context, AI will discover schema dynamically');
     }
 
-    // Build comprehensive system prompt with chat config
     const systemPrompt = getDatabaseAssistantPrompt(selectedSchema, selectedTables, chatConfig);
-
-    // If we have trained schema data, append it to the prompt
     const fullSystemPrompt = schemaDataContext
       ? `${systemPrompt}\n\n## PRE-LOADED DATABASE SCHEMA\n\n${schemaDataContext}`
       : systemPrompt;
 
-    console.log(`[Chat API] System prompt length: ${fullSystemPrompt.length} chars, selected schema: ${selectedSchema || 'none'}`);
-    console.log(`[Chat API] Using comprehensive prompt with ${schemaDataContext ? 'pre-loaded schema' : 'dynamic schema discovery'}`);
-
-
     const model = process.env.NEXT_PUBLIC_GEMINI_MODEL || 'gemini-2.5-flash';
-
-    console.log(`[Chat API] Using model: ${model}, caching: ${canUseCache}`);
-    console.log('[Chat API] Received messages!');
-
-    // Transform UIMessages to CoreMessages using AI SDK utility
     const coreMessages = convertToCoreMessages(messages);
 
-    console.log('[Chat API] Transformed to core messages!');
-
-    // Build system configuration
-    // Note: Gemini 2.5 Flash automatically uses implicit caching for repeated prefixes
-    // providing 75% cost reduction on cached content (min 1,024 tokens)
     const systemConfig: any = {
       model: google(model),
       system: fullSystemPrompt,
       messages: coreMessages,
-      // CRITICAL: Use maxSteps to allow multi-step tool execution
-      // This enables the AI to call tools AND generate text responses in the same turn
       maxSteps: 10,
       temperature: 0.7,
     };
-
-    // TODO: Implement explicit caching using GoogleAICacheManager for better control
-    // This would require storing cache IDs in the database and managing cache lifecycle
 
     // Define all 42 database tools
     systemConfig.tools = {
@@ -214,7 +192,6 @@ export async function POST(req: Request) {
           connection: z.string().optional(),
         }),
         execute: async (input, options) => {
-          // If specific table provided, get its foreign keys
           if (input.table) {
             const result = await executeDBQuery(connectionId, `schemas/${input.database}/tables/${input.table}`, {}, accessToken, 'GET');
             return {
@@ -223,7 +200,6 @@ export async function POST(req: Request) {
             };
           }
 
-          // Otherwise, get all tables and their foreign keys
           const tablesResult = await executeDBQuery(connectionId, 'tables', { schema: input.database }, accessToken, 'GET');
           const tables = tablesResult.data || [];
 
@@ -253,7 +229,6 @@ export async function POST(req: Request) {
           connection: z.string().optional(),
         }),
         execute: async (input, options) => {
-          // Get all tables to find dependencies
           const tablesResult = await executeDBQuery(connectionId, 'tables', { schema: input.database }, accessToken, 'GET');
           const tables = tablesResult.data || [];
 
@@ -262,7 +237,6 @@ export async function POST(req: Request) {
             const tableResult = await executeDBQuery(connectionId, `schemas/${input.database}/tables/${table.name}`, {}, accessToken, 'GET');
             const fks = tableResult.data?.foreignKeys || [];
 
-            // Check if any foreign keys reference our target table
             const referencingFKs = fks.filter((fk: any) =>
               fk.referenced_table === input.table
             );
@@ -298,7 +272,6 @@ export async function POST(req: Request) {
           connection: z.string().optional(),
         }),
         execute: async (input, options) => {
-          // Apply row limit from chat config if not specified or exceeds config limit
           const configLimit = chatConfig?.resultRowLimit || 100;
           const effectiveLimit = input.limit
             ? Math.min(input.limit, configLimit)
@@ -376,7 +349,6 @@ export async function POST(req: Request) {
           connection: z.string().optional(),
         }),
         execute: async (input, options) => {
-          // Build LIKE conditions for each column
           const columns = input.columns || [];
           let where = '';
           if (columns.length > 0) {
@@ -425,7 +397,6 @@ export async function POST(req: Request) {
           connection: z.string().optional(),
         }),
         execute: async (input, options) => {
-          // Use provided schema or fall back to selectedSchema from chat context
           const schemaToUse = input.schema || selectedSchema;
           if (!schemaToUse) {
             throw new Error('Database/schema name is required. Please specify a schema parameter or ensure a schema is selected in the chat context.');
@@ -449,7 +420,6 @@ export async function POST(req: Request) {
           connection: z.string().optional(),
         }),
         execute: async (input, options) => {
-          // Check read-only mode
           if (chatConfig?.readOnlyMode) {
             throw new Error('Data modification is not allowed in read-only mode. Please disable read-only mode in chat configuration to perform INSERT operations.');
           }
@@ -478,7 +448,6 @@ export async function POST(req: Request) {
           connection: z.string().optional(),
         }),
         execute: async (input, options) => {
-          // Check read-only mode
           if (chatConfig?.readOnlyMode) {
             throw new Error('Data modification is not allowed in read-only mode. Please disable read-only mode in chat configuration to perform UPDATE operations.');
           }
@@ -505,7 +474,6 @@ export async function POST(req: Request) {
           connection: z.string().optional(),
         }),
         execute: async (input, options) => {
-          // Check read-only mode
           if (chatConfig?.readOnlyMode) {
             throw new Error('Data modification is not allowed in read-only mode. Please disable read-only mode in chat configuration to perform DELETE operations.');
           }
@@ -532,7 +500,6 @@ export async function POST(req: Request) {
           connection: z.string().optional(),
         }),
         execute: async (input, options) => {
-          // Check read-only mode
           if (chatConfig?.readOnlyMode) {
             throw new Error('Data modification is not allowed in read-only mode. Please disable read-only mode in chat configuration to perform bulk INSERT operations.');
           }
@@ -622,13 +589,11 @@ export async function POST(req: Request) {
           connection: z.string().optional(),
         }),
         execute: async (input, options) => {
-          // Get table foreign keys
           const tableInfo = await executeDBQuery(connectionId, `schemas/${input.database}/tables/${input.table}`, {}, accessToken, 'GET');
           const foreignKeys = tableInfo.data?.foreignKeys || [];
 
           const violations: any[] = [];
           for (const fk of foreignKeys) {
-            // Check for orphaned records
             const sql = `
               SELECT COUNT(*) as count
               FROM ${input.database}.${input.table}
@@ -872,7 +837,6 @@ export async function POST(req: Request) {
           connection: z.string().optional(),
         }),
         execute: async (input, options) => {
-          // Get table info and row count
           const tableInfo = await executeDBQuery(connectionId, `schemas/${input.database}/tables/${input.table}`, {}, accessToken, 'GET');
           const countResult = await executeDBQuery(connectionId, 'query', {
             query: { table: input.table, database: input.database, count: true }
@@ -931,7 +895,6 @@ export async function POST(req: Request) {
         }),
         execute: async (input, options) => {
           try {
-            // Just try listing schemas to test connection
             const result = await executeDBQuery(connectionId, 'schemas', {}, accessToken, 'GET');
             return {
               status: 'healthy',
@@ -985,7 +948,46 @@ export async function POST(req: Request) {
       }),
     };
 
-    // Stream the response with UI message format for useChat hook
+    if (chatConfig?.incognitoMode) {
+      const incognitoAllowedTools = [
+        'list_databases', 'list_tables', 'describe_table',
+        'show_indexes', 'analyze_foreign_keys', 'get_table_dependencies',
+        'analyze_table_relationships', 'list_tenants', 'switch_tenant_context',
+        'get_tenant_schema', 'test_connection', 'show_connections',
+        'explain_query', 'optimize_table', 'backup_table_structure',
+        'get_database_size', 'count_records'
+      ];
+
+      const allTools = systemConfig.tools;
+      const filteredTools: any = {};
+
+      for (const toolName of incognitoAllowedTools) {
+        if (allTools[toolName]) {
+          filteredTools[toolName] = allTools[toolName];
+        }
+      }
+
+      if (filteredTools.count_records) {
+        const originalCountRecords = filteredTools.count_records;
+        filteredTools.count_records = tool({
+          description: 'Count records in a table (table-level counts only in incognito mode)',
+          inputSchema: z.object({
+            table: z.string().describe('Table name'),
+            where: z.string().optional().describe('WHERE clause (blocked in incognito mode)'),
+            database: z.string().describe('Database/schema name'),
+            connection: z.string().optional(),
+          }),
+          execute: async (input, options) => {
+            if (input.where) {
+              throw new Error('COUNT with WHERE clause is not allowed in incognito mode. Only table-level counts are permitted for privacy.');
+            }
+            return originalCountRecords.execute(input, options);
+          }
+        });
+      }
+
+      systemConfig.tools = filteredTools;
+    }
     const result = await streamText(systemConfig);
     return result.toUIMessageStreamResponse({
       originalMessages: messages,

@@ -15,6 +15,7 @@ export function getDatabaseAssistantPrompt(selectedSchema?: string, selectedTabl
 **Current Mode**: ${config.showSQLGeneration ? 'SQL GENERATION ONLY (DO NOT EXECUTE)' : 'NORMAL EXECUTION MODE'}
 **Result Row Limit**: ${config.resultRowLimit} rows (STRICTLY ENFORCE THIS LIMIT)
 **Read-Only Mode**: ${config.readOnlyMode ? 'ENABLED (Block all modifications)' : 'DISABLED'}
+**Incognito Mode**: ${config.incognitoMode ? '🔒 ENABLED (Metadata only)' : 'DISABLED'}
 
 ${config.showSQLGeneration ? `
 ### ⚠️ SQL GENERATION MODE ACTIVE ⚠️
@@ -38,6 +39,37 @@ LIMIT ${config.resultRowLimit};
 \`\`\`
 
 Note: This SQL was generated but not executed. To run it, disable 'Show SQL Generation' mode in the chat configuration."
+` : ''}
+
+${config.incognitoMode ? `
+### 🔒 INCOGNITO MODE ACTIVE
+
+**WHAT YOU CAN DO**:
+✅ Inspect database schema (tables, columns, types, constraints)
+✅ View indexes and foreign key relationships
+✅ Generate SQL queries and show in code blocks
+✅ Explain query logic and optimization
+✅ Get table-level counts (COUNT without WHERE clause)
+
+**WHAT YOU CANNOT DO**:
+❌ Access actual row data from tables
+❌ Execute SELECT queries that return data
+❌ Use COUNT with WHERE clause (prevents inference attacks)
+❌ View sample data or statistics
+
+**WHEN USERS REQUEST DATA**:
+Generate SQL in a code block with explanation and inform them that the query was not executed:
+
+Example response format:
+"Here's the SQL query you need:
+
+\`\`\`sql
+SELECT * FROM orders ORDER BY created_at DESC LIMIT 10;
+\`\`\`
+
+This query was generated but not executed because Incognito Mode is active. To run this query:
+- Copy the SQL above and execute it in your database client
+- Or disable Incognito Mode in the chat settings to let me execute queries for you"
 ` : ''}
 
 ${config.resultRowLimit ? `

@@ -12,11 +12,23 @@ import { cn } from '@/utils/ui';
 interface MessageMarkdownProps {
   content: string;
   className?: string;
+  isIncognitoMode?: boolean;
+  onSQLExecutionRequest?: (sql: string) => void;
 }
 
-// Code Block component with syntax highlighting and copy button
-function CodeBlock({ code, language }: { code: string; language: string }) {
+function CodeBlock({
+  code,
+  language,
+  isIncognitoMode,
+  onSQLExecutionRequest
+}: {
+  code: string;
+  language: string;
+  isIncognitoMode?: boolean;
+  onSQLExecutionRequest?: (sql: string) => void;
+}) {
   const [copied, setCopied] = useState(false);
+  const isSQLBlock = language === 'sql' && isIncognitoMode;
 
   const handleCopy = async () => {
     try {
@@ -28,9 +40,15 @@ function CodeBlock({ code, language }: { code: string; language: string }) {
     }
   };
 
+  const handleExecute = () => {
+    if (onSQLExecutionRequest) {
+      onSQLExecutionRequest(code);
+    }
+  };
+
   return (
     <div className="relative group">
-      <div className="absolute right-2 top-2 z-10">
+      <div className="absolute right-2 top-2 z-10 flex gap-2">
         <Button
           variant="ghost"
           size="sm"
@@ -49,6 +67,17 @@ function CodeBlock({ code, language }: { code: string; language: string }) {
             </>
           )}
         </Button>
+
+        {isSQLBlock && onSQLExecutionRequest && (
+          <Button
+            variant="default"
+            size="sm"
+            onClick={handleExecute}
+            className="h-8 px-2 bg-purple-500 hover:bg-purple-600 text-white"
+          >
+            <span className="text-xs">Execute</span>
+          </Button>
+        )}
       </div>
       <SyntaxHighlighter
         language={language}
@@ -67,11 +96,7 @@ function CodeBlock({ code, language }: { code: string; language: string }) {
   );
 }
 
-/**
- * Custom Markdown renderer for chat messages
- * Renders markdown with improved formatting for database results
- */
-export function MessageMarkdown({ content, className }: MessageMarkdownProps) {
+export function MessageMarkdown({ content, className, isIncognitoMode, onSQLExecutionRequest }: MessageMarkdownProps) {
   return (
     <div className={cn('prose prose-sm dark:prose-invert max-w-none', className)}>
       <ReactMarkdown
@@ -119,7 +144,14 @@ export function MessageMarkdown({ content, className }: MessageMarkdownProps) {
 
           // Use syntax highlighter for code blocks, especially SQL
           if (language) {
-            return <CodeBlock code={codeString} language={language} />;
+            return (
+              <CodeBlock
+                code={codeString}
+                language={language}
+                isIncognitoMode={isIncognitoMode}
+                onSQLExecutionRequest={onSQLExecutionRequest}
+              />
+            );
           }
 
           return (

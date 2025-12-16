@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useCallback, ReactNode } from "react";
+import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode } from "react";
 
 export interface QueryConfig {
   readOnly: boolean;
@@ -14,6 +14,7 @@ export interface ChatConfig {
   showSQLGeneration: boolean;
   autoExecuteQueries: boolean;
   resultRowLimit: number;
+  incognitoMode: boolean;
 }
 
 interface ConnectionExplorerContextType {
@@ -46,6 +47,7 @@ const defaultChatConfig: ChatConfig = {
   showSQLGeneration: false,
   autoExecuteQueries: true,
   resultRowLimit: 100,
+  incognitoMode: false,
 };
 
 interface ConnectionExplorerProviderProps {
@@ -56,11 +58,22 @@ export function ConnectionExplorerProvider({ children }: ConnectionExplorerProvi
   const [selectedSchema, setSelectedSchemaState] = useState<string | undefined>();
   const [selectedTables, setSelectedTables] = useState<Set<string>>(new Set());
   const [config, setConfig] = useState<QueryConfig>(defaultConfig);
-  const [chatConfig, setChatConfig] = useState<ChatConfig>(defaultChatConfig);
+
+  const [chatConfig, setChatConfig] = useState<ChatConfig>(() => {
+    if (typeof window !== 'undefined') {
+      const savedIncognito = localStorage.getItem('incognito-mode');
+      if (savedIncognito !== null) {
+        return {
+          ...defaultChatConfig,
+          incognitoMode: savedIncognito === 'true'
+        };
+      }
+    }
+    return defaultChatConfig;
+  });
 
   const setSelectedSchema = useCallback((schema: string | undefined) => {
     setSelectedSchemaState(schema);
-    // Clear selected tables when schema changes
     setSelectedTables(new Set());
   }, []);
 
@@ -89,7 +102,31 @@ export function ConnectionExplorerProvider({ children }: ConnectionExplorerProvi
   }, []);
 
   const updateChatConfig = useCallback((updates: Partial<ChatConfig>) => {
-    setChatConfig((prev) => ({ ...prev, ...updates }));
+    setChatConfig((prev) => {
+      const newConfig = { ...prev, ...updates };
+
+      if (typeof window !== 'undefined' && 'incognitoMode' in updates) {
+        localStorage.setItem('incognito-mode', String(newConfig.incognitoMode));
+      }
+
+      return newConfig;
+    });
+  }, []);
+
+  useEffect(() => {
+    const handleIncognitoChange = (event: CustomEvent<{ enabled: boolean }>) => {
+      setChatConfig((prev) => ({ ...prev, incognitoMode: event.detail.enabled }));
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('incognito-mode-change' as any, handleIncognitoChange as any);
+    }
+
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('incognito-mode-change' as any, handleIncognitoChange as any);
+      }
+    };
   }, []);
 
   const reset = useCallback(() => {
