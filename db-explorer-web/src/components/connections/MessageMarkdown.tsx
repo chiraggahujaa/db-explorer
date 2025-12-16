@@ -8,6 +8,7 @@ import { useState } from 'react';
 import { Copy, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/utils/ui';
+import { ExportableTable } from './ExportableTable';
 
 interface MessageMarkdownProps {
   content: string;
@@ -200,14 +201,16 @@ export function MessageMarkdown({ content, className, isIncognitoMode, onSQLExec
             {children}
           </blockquote>
         ),
-        // Customize tables
-        table: ({ node, children, ...props }) => (
-          <div className="overflow-x-auto my-2">
-            <table className="min-w-full divide-y divide-border" {...props}>
-              {children}
-            </table>
-          </div>
-        ),
+        // Customize tables with export functionality
+        table: ({ node, children, ...props }) => {
+          return (
+            <ExportableTable>
+              <table className="min-w-full divide-y divide-border" {...props}>
+                {children}
+              </table>
+            </ExportableTable>
+          );
+        },
         thead: ({ node, children, ...props }) => (
           <thead className="bg-muted" {...props}>
             {children}

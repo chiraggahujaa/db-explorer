@@ -1,15 +1,13 @@
 'use client';
 
-/**
- * ResultDisplay Component
- * Displays query results in appropriate format (table, text, error, metadata)
- */
-
-import React from 'react';
+import React, { useState } from 'react';
 import { parseToolResult, formatMetadata, type ParsedResult } from '@/utils/resultParser';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertCircle, CheckCircle, Database } from 'lucide-react';
+import { AlertCircle, CheckCircle, Database, Download } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { TableExportDialog } from './TableExportDialog';
+import { canExport, type ExportTableData } from '@/utils/tableExport';
 
 interface ResultDisplayProps {
   result: any;
@@ -42,25 +40,45 @@ export function ResultDisplay({ result, className = '' }: ResultDisplayProps) {
   );
 }
 
-/**
- * Table Result View
- */
 function TableResultView({ data, metadata }: { data: any; metadata?: ParsedResult['metadata'] }) {
+  const [showExportDialog, setShowExportDialog] = useState(false);
+
   if (!data || !data.columns || !data.rows) {
     return <TextResultView data="Invalid table data" />;
   }
 
   const { columns, rows } = data;
 
+  const exportData: ExportTableData = { columns, rows };
+  const canExportData = canExport(exportData);
+
   return (
     <div className="space-y-2">
-      {metadata && (
+      {canExportData && rows.length > 0 && (
+        <div className="flex items-center justify-between min-h-[1.75rem]">
+          <div className="text-xs text-muted-foreground">
+            {metadata && formatMetadata(metadata)}
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowExportDialog(true)}
+            className="h-8 px-3 text-xs gap-1.5 hover:bg-accent flex-shrink-0"
+            title="Export table data"
+          >
+            <Download className="h-4 w-4" />
+            Export
+          </Button>
+        </div>
+      )}
+
+      {!canExportData && metadata && (
         <div className="text-xs text-muted-foreground">
           {formatMetadata(metadata)}
         </div>
       )}
 
-      <div className="border rounded-md max-h-96 overflow-auto">
+      <div className="border rounded-md max-h-96 overflow-auto relative">
         <Table>
           <TableHeader>
             <TableRow>
@@ -94,21 +112,24 @@ function TableResultView({ data, metadata }: { data: any; metadata?: ParsedResul
           </TableBody>
         </Table>
       </div>
+
+      {canExportData && (
+        <TableExportDialog
+          open={showExportDialog}
+          onOpenChange={setShowExportDialog}
+          tableData={exportData}
+        />
+      )}
     </div>
   );
 }
 
-/**
- * Text Result View
- */
 function TextResultView({ data, metadata }: { data: string; metadata?: ParsedResult['metadata'] }) {
-  // Check if data is a bulleted list
   const lines = data.split('\n').filter(line => line.trim());
   const isBulletedList = lines.length > 1 && lines.slice(1).every(line =>
     line.trim().startsWith('•') || line.trim().startsWith('-')
   );
 
-  // Extract title and list items
   const title = isBulletedList ? lines[0].replace(/:\s*$/, '') : null;
   const listItems = isBulletedList ? lines.slice(1).map(line =>
     line.trim().replace(/^[•\-]\s*/, '')
@@ -144,16 +165,10 @@ function TextResultView({ data, metadata }: { data: string; metadata?: ParsedRes
   );
 }
 
-/**
- * Error Result View
- */
 function ErrorResultView({ data }: { data: string }) {
-  // Parse error to extract useful information
   const parseError = (errorText: string) => {
-    // Remove "Tables in looptest:" prefix if present
     const cleaned = errorText.replace(/^Tables in [^:]+:\s*/i, '');
 
-    // Check if it's a list of items (starting with bullets or dashes)
     const isList = cleaned.trim().split('\n').every(line =>
       !line.trim() || line.trim().startsWith('•') || line.trim().startsWith('-')
     );
@@ -166,7 +181,6 @@ function ErrorResultView({ data }: { data: string }) {
       };
     }
 
-    // Try to extract error message
     const errorMatch = cleaned.match(/error[:\s]+(.+)/i);
     if (errorMatch) {
       return {
@@ -206,9 +220,6 @@ function ErrorResultView({ data }: { data: string }) {
   );
 }
 
-/**
- * Metadata Result View (for INSERT, UPDATE, DELETE operations)
- */
 function MetadataResultView({ data, metadata }: { data: any; metadata?: ParsedResult['metadata'] }) {
   const displayData = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
 
