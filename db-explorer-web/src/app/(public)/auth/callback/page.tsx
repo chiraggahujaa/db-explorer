@@ -121,26 +121,26 @@ export default function AuthCallbackPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted/20 dark:from-background dark:via-background dark:to-muted/10 p-4">
         <div className="text-center max-w-2xl">
-          <h1 className="text-2xl font-bold text-red-600 mb-4">Authentication Error</h1>
-          <p className="text-gray-700 mb-4">{error}</p>
+          <h1 className="text-2xl font-bold text-destructive mb-4">Authentication Error</h1>
+          <p className="text-foreground mb-4">{error}</p>
           {process.env.NODE_ENV === 'development' && debugInfo && (
-            <div className="mt-4 p-4 bg-gray-100 rounded text-left text-xs overflow-auto max-h-64">
-              <pre className="whitespace-pre-wrap">{debugInfo}</pre>
+            <div className="mt-4 p-4 bg-muted rounded text-left text-xs overflow-auto max-h-64">
+              <pre className="whitespace-pre-wrap text-muted-foreground">{debugInfo}</pre>
             </div>
           )}
-          <p className="text-sm text-gray-500 mt-4">Redirecting to sign in page...</p>
+          <p className="text-sm text-muted-foreground mt-4">Redirecting to sign in page...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted/20 dark:from-background dark:via-background dark:to-muted/10 p-4">
       <div className="text-center">
         <LoadingSpinner />
-        <p className="mt-4 text-gray-700">Completing authentication...</p>
+        <p className="mt-4 text-foreground">Completing authentication...</p>
       </div>
     </div>
   );

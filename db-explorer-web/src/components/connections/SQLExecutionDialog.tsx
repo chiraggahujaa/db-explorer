@@ -56,19 +56,18 @@ export function SQLExecutionDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[90vw] w-full max-h-[90vh] overflow-hidden flex flex-col">
-        <DialogHeader>
+      <DialogContent className="w-full max-h-[90vh] overflow-hidden flex flex-col">
+        <DialogHeader className="space-y-0">
           <DialogTitle className="flex items-center gap-2">
             <span className="text-purple-500">🔒</span>
             Execute SQL Query in Incognito Mode?
           </DialogTitle>
           <DialogDescription>
-            This query was generated but not executed because Incognito Mode is active.
-            Choose how you would like to proceed:
+            Incognito Mode is active. Choose how to proceed:
           </DialogDescription>
         </DialogHeader>
 
-        <div className="my-4">
+        <div className="mt-2 mb-1.5">
           <div className="rounded-lg overflow-hidden border border-border">
             <SyntaxHighlighter
               language="sql"
@@ -84,22 +83,22 @@ export function SQLExecutionDialog({
           </div>
         </div>
 
-        <DialogFooter className="flex-col sm:flex-row gap-2">
+        <DialogFooter className="flex-col sm:flex-row gap-1.5 sm:justify-between sm:space-x-0">
           <Button
             variant="outline"
             onClick={handleCopy}
             disabled={isCopying}
-            className="w-full sm:w-auto"
+            className="w-full sm:w-auto sm:flex-shrink-0"
           >
             <Copy className="h-4 w-4 mr-2" />
             {isCopying ? "Copied!" : "Copy SQL"}
           </Button>
 
-          <div className="flex flex-col sm:flex-row gap-2 flex-1">
+          <div className="flex flex-col sm:flex-row gap-1.5 w-full sm:w-auto">
             <Button
               variant="secondary"
               onClick={handleExecuteOnce}
-              className="flex-1"
+              className="w-full sm:w-auto whitespace-nowrap"
             >
               <Play className="h-4 w-4 mr-2" />
               Execute Once
@@ -107,7 +106,7 @@ export function SQLExecutionDialog({
 
             <Button
               onClick={handleExecuteAndRemember}
-              className="flex-1 bg-purple-500 hover:bg-purple-600 text-white"
+              className="w-full sm:w-auto whitespace-nowrap bg-purple-500 hover:bg-purple-600 text-white"
             >
               <PlayCircle className="h-4 w-4 mr-2" />
               Execute & Remember
@@ -115,13 +114,12 @@ export function SQLExecutionDialog({
           </div>
         </DialogFooter>
 
-        <div className="text-xs text-muted-foreground mt-2 pt-2 border-t border-border">
+        <div className="text-xs text-muted-foreground mt-1.5 pt-1.5 border-t border-border space-y-0">
           <p>
-            <strong>Execute Once:</strong> Run this query one time only.
+            <strong>Execute Once:</strong> Run once only.
           </p>
-          <p className="mt-1">
-            <strong>Execute & Remember:</strong> Run and auto-execute future queries this session
-            (resets on page refresh).
+          <p>
+            <strong>Execute & Remember:</strong> Auto-execute future queries this session.
           </p>
         </div>
       </DialogContent>
