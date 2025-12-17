@@ -103,18 +103,22 @@ export default function DashboardPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 max-w-7xl">
+        <div className="flex flex-col items-center justify-center min-h-[60vh]">
+          <Loader2 className="w-8 h-8 animate-spin text-primary mb-4" />
+          <p className="text-muted-foreground text-sm">Loading connections...</p>
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4">
-          <p className="text-destructive">
-            Failed to load connections. Please try again.
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 max-w-7xl">
+        <div className="bg-destructive/10 border border-destructive/20 rounded-xl p-6 max-w-2xl mx-auto">
+          <p className="text-destructive font-semibold mb-1">Failed to load connections</p>
+          <p className="text-sm text-muted-foreground">
+            Please try refreshing the page or contact support if the problem persists.
           </p>
         </div>
       </div>
@@ -125,14 +129,14 @@ export default function DashboardPage() {
   const sharedConnections = data?.shared || [];
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-7xl">
+    <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 max-w-7xl">
       {/* My Connections Section */}
-      <div className="mb-12">
-        <div className="flex items-center justify-between mb-6">
+      <div className="mb-16">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">My Connections</h1>
-            <p className="text-muted-foreground mt-1">
-              Manage your database connections
+            <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground">My Connections</h1>
+            <p className="text-muted-foreground mt-2 text-sm sm:text-base">
+              Manage and access your database connections
             </p>
           </div>
           <div className="flex gap-3">
@@ -140,11 +144,16 @@ export default function DashboardPage() {
               variant="outline"
               onClick={() => setIsAcceptModalOpen(true)}
               size="lg"
+              className="transition-all duration-200 hover:shadow-md"
             >
               <UserPlus className="mr-2 h-4 w-4" />
               Accept Invitation
             </Button>
-            <Button onClick={handleAddClick} size="lg">
+            <Button 
+              onClick={handleAddClick} 
+              size="lg"
+              className="transition-all duration-200 hover:shadow-md hover:shadow-primary/20"
+            >
               <Plus className="mr-2 h-4 w-4" />
               Add Connection
             </Button>
@@ -152,28 +161,39 @@ export default function DashboardPage() {
         </div>
 
         {ownedConnections.length === 0 ? (
-          <div className="border-2 border-dashed rounded-lg p-12 text-center">
-            <Database className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-semibold mb-2">No connections yet</h3>
-            <p className="text-muted-foreground mb-4">
-              Get started by adding your first database connection
+          <div className="border-2 border-dashed border-border rounded-xl p-12 sm:p-16 text-center bg-card/50 transition-all duration-300 hover:border-primary/30 hover:bg-card">
+            <div className="w-16 h-16 rounded-full bg-primary/10 dark:bg-primary/20 flex items-center justify-center mx-auto mb-6">
+              <Database className="w-8 h-8 text-primary" />
+            </div>
+            <h3 className="text-xl font-semibold mb-2 text-foreground">No connections yet</h3>
+            <p className="text-muted-foreground mb-6 max-w-md mx-auto">
+              Get started by adding your first database connection to begin exploring your data
             </p>
-            <Button onClick={handleAddClick}>
+            <Button 
+              onClick={handleAddClick}
+              size="lg"
+              className="transition-all duration-200 hover:shadow-md hover:shadow-primary/20"
+            >
               <Plus className="mr-2 h-4 w-4" />
               Add Your First Connection
             </Button>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {ownedConnections.map((connection) => (
-              <ConnectionCard
+            {ownedConnections.map((connection, index) => (
+              <div
                 key={connection.id}
-                connection={connection}
-                onEdit={handleEdit}
-                onDelete={handleDelete}
-                onInvite={handleInvite}
-                onRetrain={handleRetrain}
-              />
+                className="animate-fade-in"
+                style={{ animationDelay: `${index * 0.05}s` }}
+              >
+                <ConnectionCard
+                  connection={connection}
+                  onEdit={handleEdit}
+                  onDelete={handleDelete}
+                  onInvite={handleInvite}
+                  onRetrain={handleRetrain}
+                />
+              </div>
             ))}
           </div>
         )}
@@ -181,25 +201,30 @@ export default function DashboardPage() {
 
       {/* Shared Connections Section */}
       {sharedConnections.length > 0 && (
-        <div className="mb-12">
-          <div className="mb-6">
-            <h2 className="text-2xl font-bold tracking-tight">Shared Connections</h2>
-            <p className="text-muted-foreground mt-1">
+        <div className="mb-16">
+          <div className="mb-8">
+            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">Shared Connections</h2>
+            <p className="text-muted-foreground mt-2 text-sm sm:text-base">
               Connections shared with you by other team members
             </p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {sharedConnections.map((connection) => (
-              <ConnectionCard
+            {sharedConnections.map((connection, index) => (
+              <div
                 key={connection.id}
-                connection={connection}
-                onEdit={handleEdit}
-                onDelete={handleDelete}
-                onInvite={handleInvite}
-                onRetrain={handleRetrain}
-                onRemove={handleRemoveShared}
-                isShared={true}
-              />
+                className="animate-fade-in"
+                style={{ animationDelay: `${index * 0.05}s` }}
+              >
+                <ConnectionCard
+                  connection={connection}
+                  onEdit={handleEdit}
+                  onDelete={handleDelete}
+                  onInvite={handleInvite}
+                  onRetrain={handleRetrain}
+                  onRemove={handleRemoveShared}
+                  isShared={true}
+                />
+              </div>
             ))}
           </div>
         </div>
